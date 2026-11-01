@@ -9,11 +9,11 @@
 - Repo: `https://github.com/shalone86/language`, branch `ccr-7ca913f8-1tjcbt` (or `main` once that branch is merged).
 - The app is a static site in `public/` plus a small Worker API in `worker/index.js`. Config is in `wrangler.jsonc`. There's no build step.
 - The Worker uses the **Workers AI** binding (`AI`) for speech-to-text (`@cf/openai/whisper-large-v3-turbo`) and Spanish voices (`@cf/deepgram/aura-2-es`). For 1–2 users, the free daily allowance is plenty.
-- It's set up the same way as the owner's existing `articulation` app (`articulate.shalonely.com`), so use that Cloudflare account.
+- It's set up the same way as the owner's existing `articulation` app (`articulate.shalonely.com`), so use that Cloudflare account (ariyandhamma@gmail.com).
 
 ## Rules
 
-- Deploy only to the owner's own Cloudflare account, the one that hosts `articulation` / `shalonely.com`. If `wrangler whoami` shows a different account, stop and ask.
+- Deploy only to the owner's own Cloudflare account: **ariyandhamma@gmail.com**, the one that hosts `articulation` / `shalonely.com`. If `wrangler whoami` shows any other email (for example admin@olphvb.org), stop and ask. Don't deploy there.
 - Don't change or delete any other Worker, DNS record or route on the account.
 - Don't commit secrets. The passcode goes in with `wrangler secret put`, never into a file.
 - Ask the owner before adding a custom domain (step 5). It creates a DNS record.
@@ -41,12 +41,12 @@ npm test                             # expect: 19 pass, 0 fail
 
 ```bash
 npx wrangler login       # opens a browser; the owner approves
-npx wrangler whoami      # confirm it's the account that has the "articulation" Worker
+npx wrangler whoami      # must say ariyandhamma@gmail.com, and the account must have the "articulation" Worker
 ```
 
 To confirm it's the right account, the Workers list should include `articulation`. Check at https://dash.cloudflare.com → Workers & Pages.
 
-If there are several accounts, set the right one: `export CLOUDFLARE_ACCOUNT_ID=<id from whoami>`.
+If a `CLOUDFLARE_API_TOKEN` is already set in the shell for another account, `unset CLOUDFLARE_API_TOKEN` first, or wrangler will use that account instead of your login. If there are several accounts, set the right one: `export CLOUDFLARE_ACCOUNT_ID=<id from whoami>`.
 
 ### 4. Deploy
 
