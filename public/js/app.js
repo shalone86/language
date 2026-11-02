@@ -7,6 +7,7 @@ import { speak, stop, prefetch, playUrl, browserVoices } from "./tts.js";
 import { health, transcribe } from "./api.js";
 import { scoreLine, isPass, soundTip, fold, tokens as tokensOf } from "./score.js";
 import * as S from "./store.js";
+import { sfx, installClickSounds } from "./sound.js";
 
 const app = document.getElementById("app");
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -74,6 +75,7 @@ function toast(msg, ms = 2600) {
 }
 
 function confetti(anchor) {
+  sfx.win();
   const box = anchor?.getBoundingClientRect?.() ?? { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
   const colors = ["#e4007c", "#ffb703", "#00a6a6", "#ff5d3b", "#7b2cbf"];
   for (let i = 0; i < 18; i++) {
@@ -483,6 +485,7 @@ async function finishRec() {
   renderDock();
   bindWordTaps();
   if (isPass(P.result)) onPass();
+  else sfx.oops();
 }
 
 function bindWordTaps() {
@@ -670,6 +673,7 @@ async function viewSettings() {
         <label><input type="checkbox" data-set="handsFree" ${s.handsFree ? "checked" : ""}> 🎙️ Listen automatically on my turn (hands-free)</label>
         <label><input type="checkbox" data-set="slowAi" ${s.slowAi ? "checked" : ""}> 🐢 Others talk slower</label>
         <label><input type="checkbox" data-set="showEn" ${s.showEn ? "checked" : ""}> 🇺🇸 Show English under every line</label>
+        <label><input type="checkbox" data-set="sounds" ${s.sounds ? "checked" : ""}> 🔔 Sound effects on buttons and answers</label>
         <label><input type="checkbox" data-set="unlockAll" ${s.unlockAll ? "checked" : ""}> 🔓 Open all levels (if you already speak some Spanish)</label>
       </div>
     </section>
@@ -750,4 +754,5 @@ document.addEventListener("click", (e) => {
 
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 window.addEventListener("hashchange", route);
+installClickSounds();
 route();

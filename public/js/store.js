@@ -12,6 +12,7 @@ const DEFAULTS = {
     browserVoice: "",
     passcode: "",
     unlockAll: false,
+    sounds: true, // button and answer sound effects
   },
   skits: {}, // id → { plays, done, stars, at }
   phrases: {}, // "skitId|es" → { es, en, skit, line, at, said }
