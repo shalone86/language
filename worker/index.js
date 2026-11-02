@@ -48,6 +48,10 @@ export default {
           const audio = await request.arrayBuffer();
           if (!audio.byteLength) return json({ error: "empty audio" }, 400);
           if (audio.byteLength > MAX_AUDIO_BYTES) return json({ error: "audio too long" }, 413);
+          if (env.STT_ORIGIN) {
+            const r = await macTranscribe(audio, env).catch((e) => (console.warn("Mac speech check failed, using Workers AI:", String(e?.message ?? e)), null));
+            if (r) return r;
+          }
           return await transcribe(audio, env);
         }
         case "GET /api/tts":
@@ -61,6 +65,21 @@ export default {
     }
   },
 };
+
+// Speech check on your own server (Whisper on a Mac), same answer shape. Falls back to Workers AI.
+async function macTranscribe(audio, env) {
+  const q = new URLSearchParams({ lang: "es", prompt: STT_PROMPT });
+  const r = await fetch(`${env.STT_ORIGIN.replace(/\/+$/, "")}/api/transcribe?${q}`, {
+    method: "POST",
+    headers: { "content-type": "audio/wav", ...(env.TTS_TOKEN ? { authorization: `Bearer ${env.TTS_TOKEN}` } : {}) },
+    body: audio,
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) throw new Error(`origin ${r.status}`);
+  const out = await r.json();
+  if (typeof out.text !== "string") throw new Error("bad answer");
+  return json(out);
+}
 
 async function transcribe(audio, env) {
   const out = await env.AI.run(STT_MODEL, {
