@@ -25,6 +25,7 @@ const TTS_VOICE_INFO = {
 };
 const TTS_VOICES = new Set(Object.keys(TTS_VOICE_INFO));
 const DEFAULT_VOICE = "estrella";
+const ORIGIN_TIMEOUT_MS = 8000; // a sleeping Mac shouldn't keep a learner waiting
 const MAX_AUDIO_BYTES = 2 * 1024 * 1024; // ~60 s of 16 kHz mono WAV
 
 // Spelling hints for Whisper. This only nudges *how* slang gets written (güey, not "way"),
@@ -81,7 +82,25 @@ async function tts(url, env, ctx) {
   if (!text) return json({ error: "missing text" }, 400);
   const voice = TTS_VOICES.has(url.searchParams.get("voice")) ? url.searchParams.get("voice") : DEFAULT_VOICE;
 
-  // Same text + voice → same audio, so cache it at the edge (skit lines repeat a lot).
+
+  // 1. Your own voice server, if TTS_ORIGIN is set (free, unlimited). Falls back to Workers AI.
+  if (env.TTS_ORIGIN) {
+    const own = ownVoice(voice, env);
+    const ownKey = new Request(`https://tts.cache/own/${encodeURIComponent(own)}/${encodeURIComponent(text)}`);
+    const ownHit = await caches.default.match(ownKey);
+    if (ownHit) return ownHit;
+    try {
+      const res = new Response(await fromOrigin(text, own, env), {
+        headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=2592000", "x-voice-source": "own" },
+      });
+      ctx.waitUntil(caches.default.put(ownKey, res.clone()));
+      return res;
+    } catch (e) {
+      console.warn("voice server unavailable, using Workers AI:", String(e?.message ?? e));
+    }
+  }
+
+  // 2. Workers AI. Same text + voice → same audio, so cache it at the edge (skit lines repeat a lot).
   const cacheKey = new Request(`https://tts.cache/aura-2-es/${voice}/${encodeURIComponent(text)}`);
   const cache = caches.default;
   const hit = await cache.match(cacheKey);
@@ -90,10 +109,35 @@ async function tts(url, env, ctx) {
   const raw = await env.AI.run(TTS_MODEL, { text, speaker: voice, encoding: "mp3" }, { returnRawResponse: true });
   if (!raw.ok) return json({ error: `tts failed (${raw.status})` }, 502);
   const res = new Response(raw.body, {
-    headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=2592000" },
+    headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=2592000", "x-voice-source": "aura" },
   });
   ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
+}
+
+// Kokoro has one Spanish woman (ef_dora) and two men (em_alex, em_santa). Each character keeps
+// the same one, so a skit still sounds like different people (just not different accents).
+function ownVoice(voice, env) {
+  if (/female/.test(TTS_VOICE_INFO[voice])) return env.TTS_VOICE_F || "ef_dora";
+  const h = [...voice].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return h % 2 ? "em_alex" : "em_santa";
+}
+
+// Your own voice server (e.g. Kokoro on a Mac) speaking the OpenAI-style API. Throws if it's down.
+async function fromOrigin(text, voice, env) {
+  const headers = { "content-type": "application/json" };
+  if (env.TTS_TOKEN) headers.authorization = `Bearer ${env.TTS_TOKEN}`;
+  const r = await fetch(`${env.TTS_ORIGIN.replace(/\/+$/, "")}/v1/audio/speech`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ model: env.TTS_MODEL || "kokoro", input: text, voice, response_format: "mp3", speed: 1 }),
+    signal: AbortSignal.timeout(ORIGIN_TIMEOUT_MS),
+  });
+  const type = r.headers.get("content-type") ?? "";
+  if (!r.ok || !/audio|octet-stream/.test(type)) throw new Error(`voice server answered ${r.status} ${type}`);
+  const buf = await r.arrayBuffer();
+  if (buf.byteLength < 500) throw new Error("voice server sent an empty clip");
+  return buf;
 }
 
 function toBase64(buf) {
