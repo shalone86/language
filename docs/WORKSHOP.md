@@ -129,10 +129,26 @@ Workers AI's `@cf/deepgram/aura-2-es` has 10 voices. Deepgram lists their accent
 - Stress (*esta* / *está*, *papa* / *papá*) can't be checked: Whisper places written accents from context, not from your voice, so the scorer ignores accent marks.
 - Single-sound faults (a soft rr that's still understood) pass. Catching those needs Way 4's phoneme model, which is the natural next upgrade for the self-hosted option.
 
+## Update: rounds, review tests and tracking
+
+Way 3 (meaning-based checking) now has a safe place in the design: **the third round of a skit you've already played twice.** By then you know the scene, so free replies stay on topic, and the LLM only answers a narrow question ("does this make sense as the next line?") instead of running the conversation.
+
+| Round | On screen | Passes when |
+|---|---|---|
+| 1 · Con letra | every word (level 1: you hear it first) | ≥ 75% of the line's words came through |
+| 2 · A medias | half the words are blanks, slang phrases blanked first; English meaning shown | same |
+| 3 · Sin letra | only the English meaning | the line's words came through, **or** `/api/judge` says the reply makes sense in Spanish here. If the judge can't be reached, ≥ 50% of the script line passes. |
+
+- **Peeking** (👀, tapping a blank, or 👂 in rounds 2–3) is always allowed. It just doesn't count as a first try.
+- A **missed** round-3 reply doesn't reveal the script line. The answer only shows after you move on.
+- **Repaso** uses a Leitner schedule (1 → 3 → 7 → 14 → 30 → 60 days). A review is the line before plus your line in round-3 style, but the reply must contain the phrase being reviewed (any spelling, e.g. *wey/güey*), so you can't pass by dodging the slang.
+- **Tracking** counts any spoken attempt as a day used (local time zone, not UTC). The streak survives until the end of the next day. "Words learned" means distinct normalized words that came through in a passed line; in round 3 only words that also appear in that skit's script count, so speech-to-text noise doesn't inflate it.
+- **Unverified:** the meaning judge's accept/reject rate on real learner replies. Collect a few hundred round-3 attempts and check where it's too strict or too lenient before relying on it.
+
 ## Roadmap
 
 1. **Measure** pass/fail accuracy on real recordings and tune the thresholds.
-2. **Free play (Way 3)** after level 4: LLM character from the skit's scene card, restricted to that country's phrase list, with recasts you repeat (those *are* checkable).
+2. **Free play (Way 3, full)** after level 4: an LLM character that improvises beyond the script, restricted to that country's phrase list, with recasts you repeat (those *are* checkable). Round 3 already uses the meaning checker for single replies.
 3. **Phoneme check (Way 4)** on a self-hosted server, for an opt-in "precision" mode on rr / ñ / vowels.
 4. More skits per country and real branching (different AI replies per choice), plus spaced review of *Mis frases* as mini-skits.
 5. Human-recorded audio for Argentine, Chilean and Caribbean voices.

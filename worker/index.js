@@ -4,8 +4,12 @@
 //   GET  /api/health      → { stt, tts, backend, model, voices }
 //   POST /api/transcribe  → body: audio/wav (16 kHz mono) → { text, words }
 //   GET  /api/tts?text=…&voice=estrella → audio/mpeg
+//   POST /api/judge       → body: {scene, context, intent, expected, said} → {ok, note}
+//                            ("does this reply make sense here?" for rounds without words)
 //
 // Optional secret APP_PASSCODE: when set, API calls need header x-app-passcode.
+
+import { JUDGE_MODEL, cleanJudgeRequest, judgeMessages, parseJudge } from "../public/js/judge.js";
 
 const STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 const TTS_MODEL = "@cf/deepgram/aura-2-es";
@@ -43,7 +47,7 @@ export default {
     try {
       switch (`${request.method} ${url.pathname}`) {
         case "GET /api/health":
-          return json({ stt: !!env.AI, tts: !!env.AI, backend: "Cloudflare Workers AI", model: STT_MODEL.split("/").pop(), voices: TTS_VOICE_INFO });
+          return json({ stt: !!env.AI, tts: !!env.AI, backend: "Cloudflare Workers AI", model: STT_MODEL.split("/").pop(), judge: !!env.AI, voices: TTS_VOICE_INFO });
         case "POST /api/transcribe": {
           const audio = await request.arrayBuffer();
           if (!audio.byteLength) return json({ error: "empty audio" }, 400);
@@ -54,6 +58,8 @@ export default {
           }
           return await transcribe(audio, env);
         }
+        case "POST /api/judge":
+          return await judge(request, env);
         case "GET /api/tts":
           return await tts(url, env, ctx);
         default:
@@ -94,6 +100,15 @@ async function transcribe(audio, env) {
   });
   const words = (out.segments ?? []).flatMap((s) => s.words ?? []).map((w) => ({ word: w.word, start: w.start, end: w.end }));
   return json({ text: (out.text ?? "").trim(), words });
+}
+
+async function judge(request, env) {
+  const r = cleanJudgeRequest(await request.json().catch(() => null));
+  if (!r) return json({ error: "missing said" }, 400);
+  const out = await env.AI.run(JUDGE_MODEL, { messages: judgeMessages(r), max_tokens: 120, temperature: 0 });
+  const v = parseJudge(out);
+  if (!v) return json({ error: "judge gave no answer" }, 502);
+  return json(v);
 }
 
 async function tts(url, env, ctx) {

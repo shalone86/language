@@ -24,16 +24,17 @@ export const COUNTRIES = {
   pr: { flag: "🇵🇷", name: "Puerto Rico" },
 };
 
-// How much help each level gives. "echo": the AI says your line first, then you repeat it.
-// "read": you read your line. "recall": you see the English, the Spanish is hidden (peek if you need to).
+// Levels get harder through the skits themselves (longer lines, more slang, faster voices,
+// more countries). Inside every skit, three rounds take the written help away step by step
+// (see ROUNDS in progress.js). echo: in round 1 the AI says your line first (Settings can change it).
 export const LEVELS = [
-  { n: 1, name: "Calentando", en: "Warming up", support: "echo", rate: 0.9, unlockAfter: 0,
-    blurb: "Short everyday chats in Mexico. You hear each of your lines first, then say it back." },
-  { n: 2, name: "Agarrando la onda", en: "Getting the hang of it", support: "read", rate: 0.95, unlockAfter: 3,
+  { n: 1, name: "Calentando", en: "Warming up", echo: true, rate: 0.9, unlockAfter: 0,
+    blurb: "Short everyday chats in Mexico. In round 1 you hear each of your lines first, then say it back." },
+  { n: 2, name: "Agarrando la onda", en: "Getting the hang of it", echo: false, rate: 0.95, unlockAfter: 3,
     blurb: "Longer scenes, two voices. Read your line and say it — tap 👂 if you want to hear it first." },
-  { n: 3, name: "Sin miedo", en: "No fear", support: "recall", rate: 1, unlockAfter: 3,
-    blurb: "You see what to say in English and say it in Spanish. Peek if you need to. Colombia, Argentina, Perú." },
-  { n: 4, name: "Como local", en: "Like a local", support: "recall", rate: 1.05, unlockAfter: 3,
+  { n: 3, name: "Sin miedo", en: "No fear", echo: false, rate: 1, unlockAfter: 3,
+    blurb: "Colombia, Argentina and Perú: new slang, new accents, normal speed." },
+  { n: 4, name: "Como local", en: "Like a local", echo: false, rate: 1.05, unlockAfter: 3,
     blurb: "Full speed, more slang, Chile and Puerto Rico. Talk like you live there." },
 ];
 

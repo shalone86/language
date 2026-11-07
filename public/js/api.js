@@ -41,3 +41,18 @@ export async function serverTts(text, voice) {
   if (!r.ok) throw new Error(`TTS ${r.status}`);
   return r.blob();
 }
+
+/**
+ * Ask whether a free reply makes sense in the conversation (rounds with no words, reviews).
+ * Returns { ok, note }. Throws if the checker can't be reached; callers fall back to word matching.
+ */
+export async function judge(payload) {
+  const r = await fetch("api/judge", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers() },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!r.ok) throw new Error(`judge ${r.status}`);
+  return r.json();
+}
