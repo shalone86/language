@@ -116,3 +116,61 @@ const out = process.argv[2] || ".";
 const files = { "1-on-top-of-the-world.svg": c1, "2-bear-head-globe.svg": c2, "3-bear-hug.svg": c3, "4-wordmark.svg": c4, "4b-wordmark-on-dark.svg": c4w };
 for (const [n, s] of Object.entries(files)) fs.writeFileSync(`${out}/${n}`, s);
 console.log(Object.keys(files).join("\n"));
+
+// ── 5. Wordmark with the bear-hug bear: the O of WORLD is the globe, and the bear peeks over it ──
+// The bear is concept 3, drawn at its own coordinates (globe centre 256,372, radius 134) and
+// scaled onto the O. Line widths are set so they come out about 5 px after scaling.
+function hugOnO(gx, gy, gR, id) {
+  const k = gR / 134, sw = 5 / k;
+  return `<g transform="translate(${gx} ${gy}) scale(${k.toFixed(4)}) translate(-256 -372)">
+    <circle cx="186" cy="114" r="30" fill="${WHITE}" stroke="${NAVY}" stroke-width="${sw}"/>
+    <circle cx="326" cy="114" r="30" fill="${WHITE}" stroke="${NAVY}" stroke-width="${sw}"/>
+    <circle cx="186" cy="114" r="12" fill="${NAVY}" opacity="0.25"/><circle cx="326" cy="114" r="12" fill="${NAVY}" opacity="0.25"/>
+    <circle cx="256" cy="196" r="96" fill="${WHITE}" stroke="${NAVY}" stroke-width="${sw}"/>
+    <circle cx="220" cy="180" r="12" fill="${NAVY}"/><circle cx="292" cy="180" r="12" fill="${NAVY}"/>
+    <ellipse cx="256" cy="222" rx="38" ry="28" fill="${ICE}"/>
+    <path d="M238 208 Q256 198 274 208 Q272 226 256 228 Q240 226 238 208Z" fill="${NAVY}"/>
+    <circle cx="256" cy="372" r="134" fill="${OCEAN}" stroke="${NAVY}" stroke-width="${sw * 1.2}"/>
+    ${globeLines(256, 372, 128, id, { opacity: 0.5, w: 9 })}
+    <ellipse cx="186" cy="262" rx="46" ry="30" fill="${WHITE}" stroke="${NAVY}" stroke-width="${sw}" transform="rotate(-18 186 262)"/>
+    <ellipse cx="326" cy="262" rx="46" ry="30" fill="${WHITE}" stroke="${NAVY}" stroke-width="${sw}" transform="rotate(18 326 262)"/>
+    <g fill="${NAVY}"><circle cx="170" cy="272" r="7"/><circle cx="188" cy="266" r="7"/><circle cx="206" cy="258" r="7"/><circle cx="306" cy="258" r="7"/><circle cx="324" cy="266" r="7"/><circle cx="342" cy="272" r="7"/></g>
+  </g>`;
+}
+
+// Stacked: POLAR over W(O)RLD, square canvas.
+function hugStacked(ink, bg) {
+  const size = 128, gR = 47, gap = 6;
+  const w = word("W", 0, 0, size), rld = word("RLD", 0, 0, size), polar = word("POLAR", 0, 0, size);
+  const line2 = w.w + gap + gR * 2 + gap + rld.w;
+  const x1 = 256 - polar.w / 2, x2 = 256 - line2 / 2;
+  const y1 = 196, y2 = 410;          // extra room between the lines for the bear's head
+  const gx = x2 + w.w + gap + gR, gy = y2 - 45;
+  return svg(`${bg ? `<rect width="512" height="512" rx="120" fill="${bg}"/>` : ""}
+  <path d="${word("POLAR", x1, y1, size).d}" fill="${ink}"/>
+  <path d="${word("W", x2, y2, size).d}" fill="${ink}"/>
+  <path d="${word("RLD", gx + gR + gap, y2, size).d}" fill="${ink}"/>
+  ${hugOnO(gx, gy, gR, `h${bg ? "d" : "l"}`)}`);
+}
+
+// One line: POLAR W(O)RLD, wide canvas for website headers.
+function hugWide(ink, bg) {
+  const size = 128, gR = 47, gap = 6, space = 34;
+  const a = word("POLAR W", 0, 0, size), rld = word("RLD", 0, 0, size);
+  const total = a.w + gap + gR * 2 + gap + rld.w;
+  const W = 1200, H = 260, x = (W - total) / 2, y = 203; // bear top to baseline is ~146 px: centred
+  const gx = x + a.w + gap + gR, gy = y - 45;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${bg ? `<rect width="${W}" height="${H}" rx="60" fill="${bg}"/>` : ""}
+  <path d="${word("POLAR W", x, y, size).d}" fill="${ink}"/>
+  <path d="${word("RLD", gx + gR + gap, y, size).d}" fill="${ink}"/>
+  ${hugOnO(gx, gy, gR, `w${bg ? "d" : "l"}`)}</svg>\n`;
+}
+
+const out2 = process.argv[2] || ".";
+const more = {
+  "5-wordmark-bear-hug.svg": hugStacked(NAVY),
+  "5b-wordmark-bear-hug-on-dark.svg": hugStacked(WHITE, NAVY),
+  "5c-wordmark-bear-hug-wide.svg": hugWide(NAVY),
+  "5d-wordmark-bear-hug-wide-on-dark.svg": hugWide(WHITE, NAVY),
+};
+for (const [n, s] of Object.entries(more)) fs.writeFileSync(`${out2}/${n}`, s);
