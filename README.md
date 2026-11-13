@@ -1,6 +1,6 @@
 # 🐻‍❄️ Skit Spanish by Polar World
 
-<img src="public/icon.svg" width="120" alt="Logo: a polar bear in a beach chair under an umbrella, sitting on top of the globe">
+<img src="public/icon.svg" width="120" alt="Logo: a polar bear peeking over the world, hugging it">
 
 **Spanish slang, out loud.**
 
@@ -49,5 +49,6 @@ npx wrangler dev  # local dev (the AI binding calls your Cloudflare account)
 | `public/js/judge.js` | "Does this reply make sense?" prompt and answer parsing (Worker + tests) |
 | `public/js/app.js` | Home, skit player (rounds + reviews), Progreso, Mis frases, settings |
 | `public/js/audio.js`, `wav.js`, `tts.js`, `api.js` | Mic, WAV and voice helpers, from articulation |
-| `design/logo/` | The logo (polar bear in a beach chair on a globe): `make.py` draws it as SVG; see its README to change it and re-export the icons |
+| `design/polar-world/` | Polar World logos. The app icon is the bear-hug bear (`3-bear-hug.svg`); `app-icons.cjs` builds `public/icon.svg` from it. The one-line wordmark is `5c`/`5d` |
+| `design/logo/` | The earlier beach-chair logo (no longer used) |
 | `worker/index.js` | Cloudflare Worker API (`/api/health`, `/api/transcribe`, `/api/tts`, `/api/judge`) |

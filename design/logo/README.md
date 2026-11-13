@@ -1,4 +1,6 @@
-# Logo
+# Logo (earlier version, no longer used)
+
+The app now uses the bear-hug bear from `design/polar-world/`. This beach-chair logo is kept for reference.
 
 A polar bear in sunglasses, lounging in a striped beach chair under a beach umbrella, sitting up in it with a drink. The chair sits on the polar ice cap at the top of the globe (the North Pole is on top, and the umbrella pole is striped like a pole marker), out in space (stars, nebula, a ringed planet). It's based on Polar World's logo, in the app's colors.
 
