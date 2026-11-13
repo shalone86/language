@@ -1,4 +1,4 @@
-// Hablar: practice everyday Spanish out loud in short skits with an AI partner.
+// Skit Spanish by Polar World: practice everyday Spanish out loud in short skits with an AI partner.
 // Plain ES modules, no build step (same setup as the articulation app).
 
 import { SKITS, LEVELS, COUNTRIES, skitById, skitsInLevel, lineOptions } from "./data/skits.js";
@@ -124,7 +124,8 @@ function viewHome() {
   const st = S.stats();
   render(`
     <section class="hero">
-      <p class="eyebrow">Mexican &amp; Latin American Spanish, out loud</p>
+      <img class="hero-logo" src="icon.svg" alt="" width="112" height="112">
+      <p class="eyebrow">Skit Spanish · by Polar World</p>
       <h1>Habla sin miedo.</h1>
       <p class="lede">Real everyday scenes. The AI plays the other person, you play you. Say your lines out loud and the app tells you if they came through.</p>
       <a class="btn primary big" href="#/skit/${next.id}">▶ ${np.rounds ? `Ronda ${nextRound(np.rounds)}` : "Empezar"}: ${esc(next.title)} ${COUNTRIES[next.country].flag}</a>
@@ -868,7 +869,7 @@ function savingNotice() {
 function downloadBackup() {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([S.exportData()], { type: "application/json" }));
-  a.download = `hablar-progress-${localDay()}.json`;
+  a.download = `skit-spanish-progress-${localDay()}.json`;
   document.body.append(a);
   a.click();
   a.remove();

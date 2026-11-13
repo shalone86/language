@@ -1,4 +1,8 @@
-# 🗣️ Hablar: Spanish slang, out loud
+# 🐻‍❄️ Skit Spanish by Polar World
+
+<img src="public/icon.svg" width="120" alt="Logo: a polar bear in a beach chair under an umbrella, sitting on top of the globe">
+
+**Spanish slang, out loud.**
 
 Practice everyday **Mexican and Latin American Spanish** by acting out short skits with an AI partner. The AI plays the taquero, your compa, the mechanic; you play you. Say your lines out loud, and the app tells you word by word whether they came through.
 
@@ -45,4 +49,5 @@ npx wrangler dev  # local dev (the AI binding calls your Cloudflare account)
 | `public/js/judge.js` | "Does this reply make sense?" prompt and answer parsing (Worker + tests) |
 | `public/js/app.js` | Home, skit player (rounds + reviews), Progreso, Mis frases, settings |
 | `public/js/audio.js`, `wav.js`, `tts.js`, `api.js` | Mic, WAV and voice helpers, from articulation |
+| `design/logo/` | The logo (polar bear in a beach chair on a globe): `make.py` draws it as SVG; see its README to change it and re-export the icons |
 | `worker/index.js` | Cloudflare Worker API (`/api/health`, `/api/transcribe`, `/api/tts`, `/api/judge`) |

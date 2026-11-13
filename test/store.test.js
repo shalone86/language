@@ -93,7 +93,7 @@ test("the probe says storage works here", () => {
 test("a download records when it happened and says what app it's from", () => {
   const before = Date.now();
   const file = JSON.parse(S.exportData());
-  assert.equal(file.app, "hablar");
+  assert.equal(file.app, "skit-spanish");
   assert.ok(S.lastBackup() >= before);
 });
 

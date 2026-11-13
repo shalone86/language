@@ -3,6 +3,7 @@
 
 import { localDay, streakStats, wordsOf, reviewed, firstSchedule, dueItems } from "./progress.js";
 
+// The app was first called Hablar. The storage key keeps that name so nobody loses progress.
 const KEY = "hablar:v1";
 
 const DEFAULTS = {
@@ -188,7 +189,7 @@ export function reviewPhrase(skit, es, ok) {
 export function exportData() {
   state.lastBackup = Date.now();
   save();
-  return JSON.stringify({ app: "hablar", version: 2, exported: new Date().toISOString(), ...state }, null, 2);
+  return JSON.stringify({ app: "skit-spanish", version: 2, exported: new Date().toISOString(), ...state }, null, 2);
 }
 
 /** When the learner last downloaded a backup (ms), or null. */
@@ -201,8 +202,8 @@ export const lastBackup = () => state.lastBackup ?? null;
  */
 export function importData(json) {
   let s;
-  try { s = JSON.parse(json); } catch { throw new Error("That file isn’t a Hablar backup (it couldn’t be read)."); }
-  if (!s || typeof s.skits !== "object") throw new Error("That file doesn’t look like a Hablar backup.");
+  try { s = JSON.parse(json); } catch { throw new Error("That file isn’t a Skit Spanish backup (it couldn’t be read)."); }
+  if (!s || typeof s.skits !== "object") throw new Error("That file doesn’t look like a Skit Spanish backup.");
   const incoming = migrate({ ...structuredClone(DEFAULTS), ...s, settings: { ...DEFAULTS.settings, ...s.settings } });
   const before = stats();
   state = mergeStates(state, incoming);

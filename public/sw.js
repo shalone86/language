@@ -1,12 +1,13 @@
 // Offline support (same strategy as articulation): network first for the app so updates show
 // right away, cache first for fonts and voice clips. Speech checks always need the network.
 
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = "runtime-v1";
 
 const ASSETS = [
-  "./", "index.html", "manifest.webmanifest", "icon.svg", "css/app.css",
+  "./", "index.html", "manifest.webmanifest", "icon.svg", "apple-touch-icon.png",
+  "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-192.png", "icons/maskable-512.png", "css/app.css",
   "js/app.js", "js/api.js", "js/audio.js", "js/judge.js", "js/progress.js", "js/review.js", "js/score.js", "js/sound.js", "js/store.js", "js/tts.js", "js/wav.js",
   "js/data/skits.js",
 ];
