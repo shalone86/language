@@ -1,6 +1,6 @@
 # Logo
 
-A polar bear in sunglasses, lounging in a striped beach chair under a beach umbrella, with the chair sitting on top of the globe. It's based on Polar World's logo, in the app's colors.
+A polar bear in sunglasses, lounging in a striped beach chair under a beach umbrella, with the chair sitting on top of the globe, out in space (stars, nebula, a ringed planet). It's based on Polar World's logo, in the app's colors.
 
 - `make.py` draws it. Every shape is plain SVG in that file: change a color or a coordinate there, not in the SVGs.
 - `logo.svg` is the rounded app tile (also used as `public/icon.svg`).
