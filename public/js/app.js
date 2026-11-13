@@ -21,6 +21,9 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Came through: the words matched, or (round 3, reviews) the reply made sense. */
 const passed = (r) => isPass(r ?? {}) || r?.result === "sense";
 
+// The app's main web address. Progress is stored per address, so other addresses get a notice.
+const HOME_HOST = "hablar.shalonely.com";
+
 // Without the meaning checker, round 3 accepts a reply that gets this much of the script line.
 const LOOSE_PASS = 0.5;
 
@@ -133,6 +136,7 @@ function viewHome() {
         <a href="#/progreso"><b>${st.roundsDone}</b>/${SKITS.length * 3} rounds</a>
       </p>
     </section>
+    ${savingNotice()}
     ${micSupported() ? "" : `<p class="note warn">This browser can’t record audio. You can still listen to every skit; try Chrome, Edge or Safari to speak.</p>`}
     ${LEVELS.map(levelHtml).join("")}
   `);
@@ -248,6 +252,7 @@ function bindToggles() {
 
 function startSkit(skit, round = 1) {
   S.startSkit(skit.id);
+  S.askToKeepData();
   const mv = meVoice(skit);
   P = {
     skit, level: LEVELS[skit.level - 1], round, echo: echoFor(skit, round), meVoice: mv,
@@ -589,6 +594,7 @@ async function finishRec() {
   const take = await P.rec.stop();
   if (!P || P.token !== tok) return;
   P.take = take;
+  S.markActive(); // any try counts as practicing today, even if nothing was heard
   if (!take?.speech) {
     P.busy = false;
     P.result = { result: "nothing" };
@@ -706,6 +712,7 @@ function finishSkit() {
     ${opened ? `<p class="note good">🔓 Level ${opened.n} is open: <b>${esc(opened.name)}</b> (${esc(opened.en)})!</p>` : ""}
     ${nextR && round >= was ? `<p class="note">Next: <b>Ronda ${nextR} · ${esc(ROUNDS[nextR - 1].name)}</b> — ${esc(ROUNDS[nextR - 1].blurb)}</p>` : ""}
     ${learned.length ? `<h3>You said these out loud</h3><ul class="learned">${learned.map((p) => `<li><button type="button" class="chip" data-phrase="${skit.phrases.indexOf(p)}">${esc(p.es)}</button> <span class="muted">${esc(p.en)}</span></li>`).join("")}</ul>` : ""}
+    ${backupNudgeHtml()}
     <div class="row">
       ${nextR ? `<button type="button" class="btn primary" id="next-round">▶ Ronda ${nextR}</button>` : ""}
       <a class="btn ${nextR ? "" : "primary"}" href="#/skit/${next.id}">${nextR ? "" : "▶ "}${esc(next.title)} ${COUNTRIES[next.country].flag}</a>
@@ -714,6 +721,7 @@ function finishSkit() {
   document.getElementById("convo").append(li);
   li.querySelectorAll("[data-phrase]").forEach((b) => b.addEventListener("click", () => showPhrase(skit, +b.dataset.phrase)));
   li.querySelector("#again").addEventListener("click", () => startSkit(skit, round));
+  li.querySelector("[data-backup=down]")?.addEventListener("click", (e) => { downloadBackup(); e.target.closest("p").remove(); });
   li.querySelector("#next-round")?.addEventListener("click", () => startSkit(skit, nextR));
   scrollDown(li);
   confetti(li.querySelector(".big-rounds"));
@@ -756,6 +764,8 @@ function relativeDayFuture(day) {
 function startReview(items, practice) {
   const skit = buildReview(items);
   if (!skit.lines.length) return toast("Those phrases aren’t in the skits any more.");
+  S.markActive();
+  S.askToKeepData();
   P = {
     skit, review: true, practice, level: { rate: 1 }, round: 3, echo: false, meVoice: "selena",
     i: 0, firstTry: 0, meLines: skit.lines.filter((l) => l.who === "me").length, graded: false, reviewed: [],
@@ -844,6 +854,76 @@ function showPhrase(skit, i) {
 
 function closeSheet() { document.getElementById("sheet")?.classList.remove("show"); }
 
+// ───────────────────────── saving & moving progress ─────────────────────────
+
+/** Warnings when progress can't be kept, or is being kept somewhere unexpected. */
+function savingNotice() {
+  if (!S.storageWorks())
+    return `<p class="note warn">⚠️ <b>This browser isn’t saving your progress</b> (private browsing, or site data is blocked). Use a normal window, or allow site data for this page, so your streak and words are kept.</p>`;
+  if (location.hostname !== HOME_HOST && /workers\.dev$/.test(location.hostname))
+    return `<p class="note warn">📍 You’re on a second address for this app. Progress is saved <b>separately for each web address</b>, so use <a href="https://${HOME_HOST}/">${HOME_HOST}</a>. To bring progress from here, <a href="#/progreso">download it</a> and upload it there.</p>`;
+  return "";
+}
+
+function downloadBackup() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([S.exportData()], { type: "application/json" }));
+  a.download = `hablar-progress-${localDay()}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  toast("Progress downloaded ✓ — keep the file, or upload it on another device");
+}
+
+async function uploadBackup(file, after) {
+  if (!file) return;
+  try {
+    const r = S.importData(await file.text());
+    const bits = [r.rounds && plural(r.rounds, "round"), r.words && plural(r.words, "word"), r.phrases && plural(r.phrases, "phrase"), r.days && plural(r.days, "day")].filter(Boolean);
+    toast(bits.length ? `Progress added: ${bits.join(", ")} ✓` : "Uploaded ✓ — nothing new in that file", 4000);
+    after?.();
+  } catch (err) { toast(err.message, 5000); }
+}
+
+/** The "your progress lives here" panel, with download and upload. */
+function backupPanelHtml() {
+  const last = S.lastBackup();
+  const lastTxt = last ? relativeDay(localDay(new Date(last))) : "never";
+  return `
+    <section class="panel backup" id="backup">
+      <h2>💾 Your progress</h2>
+      <p>It’s saved <b>in this browser, on this device</b> — no account needed. Last downloaded: <b>${esc(lastTxt)}</b>.</p>
+      <div class="row">
+        <button type="button" class="btn primary small" data-backup="down">⬇ Download my progress</button>
+        <label class="btn small">⬆ Upload progress<input type="file" accept="application/json,.json" data-backup="up" hidden></label>
+      </div>
+      <details>
+        <summary>Using another phone or computer?</summary>
+        <ol class="small">
+          <li>Here, tap <b>Download my progress</b>. You get a small file.</li>
+          <li>Send the file to the other device (email it to yourself, AirDrop, Google Drive…).</li>
+          <li>Open <b>${HOME_HOST}</b> there, go to <b>Progreso</b>, and tap <b>Upload progress</b>.</li>
+        </ol>
+        <p class="muted small">Uploading adds to what’s already on that device. Nothing is erased: you keep the best rounds, every day used, and every word and phrase from both.
+        Each web address and each browser keeps its own copy (on iPhone, the home-screen app and Safari count as two).</p>
+      </details>
+    </section>`;
+}
+
+function bindBackup(rerender) {
+  app.querySelector("[data-backup=down]")?.addEventListener("click", () => { downloadBackup(); rerender?.(); });
+  app.querySelector("[data-backup=up]")?.addEventListener("change", (e) => uploadBackup(e.target.files[0], rerender));
+}
+
+/** On the finish screen: remind to back up once there's something worth keeping. */
+function backupNudgeHtml() {
+  const st = S.stats();
+  const last = S.lastBackup();
+  const stale = !last ? st.daysUsed >= 2 : Date.now() - last > 14 * 864e5;
+  if (!stale || !S.storageWorks()) return "";
+  return `<p class="note small">💾 Your progress is saved in this browser only. <button type="button" class="linkish" data-backup="down">Download a copy</button> to keep it safe or use it on another device.</p>`;
+}
+
 // ───────────────────────── progress page ─────────────────────────
 
 function viewProgress() {
@@ -851,6 +931,7 @@ function viewProgress() {
   const tile = (icon, value, label, sub = "") => `<div class="tile"><span class="tile-icon" aria-hidden="true">${icon}</span><b>${value}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
   render(`
     <h1>Progreso</h1>
+    ${savingNotice()}
     <div class="tiles">
       ${tile("🔥", st.current, "day streak", st.current && !st.practicedToday ? "practice today to keep it" : st.practicedToday ? "✓ practiced today" : "")}
       ${tile("🏆", st.longest, "best streak")}
@@ -862,6 +943,7 @@ function viewProgress() {
       ${tile("⏱", st.seconds < 60 ? `${Math.round(st.seconds)}s` : `${Math.round(st.seconds / 60)} min`, "time talking", "out loud, in Spanish")}
       ${tile("🔁", st.due, "to review", st.due ? `<a href="#/repaso">review now</a>` : "all caught up")}
     </div>
+    ${backupPanelHtml()}
     <h2>Practice calendar <small>last 15 weeks</small></h2>
     ${calendarHtml(S.activity())}
     <h2>Skits <small>${st.roundsDone} of ${SKITS.length * 3} rounds</small></h2>
@@ -874,6 +956,7 @@ function viewProgress() {
       }).join("")}</tbody>
     </table>
   `);
+  bindBackup(viewProgress);
 }
 
 /** A GitHub-style grid of the last 15 weeks; darker = more lines spoken that day. */
@@ -962,11 +1045,13 @@ async function viewSettings() {
     </section>
     <section class="panel">
       <h2>Progress</h2>
+      <p class="small">Saved in this browser on this device. Download it to keep a copy or to move it to another device, then upload it there (it’s added to what’s already there).</p>
       <div class="row">
-        <button type="button" class="btn small" id="export">⬇ Back up</button>
-        <label class="btn small">⬆ Restore<input type="file" accept="application/json" id="import" hidden></label>
+        <button type="button" class="btn small" data-backup="down">⬇ Download my progress</button>
+        <label class="btn small">⬆ Upload progress<input type="file" accept="application/json,.json" data-backup="up" hidden></label>
         <button type="button" class="btn small danger" id="reset">Start over</button>
       </div>
+      ${S.storageWorks() ? "" : `<p class="note warn small">⚠️ This browser isn’t saving data right now (private browsing?).</p>`}
     </section>
     <p class="muted small">Everything you do is kept in this browser. Recordings are sent to the speech checker and not stored.</p>
   `);
@@ -981,15 +1066,7 @@ async function viewSettings() {
   };
   fillVoices();
   if (typeof speechSynthesis !== "undefined") speechSynthesis.onvoiceschanged = fillVoices;
-  document.getElementById("export").addEventListener("click", () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([S.exportData()], { type: "application/json" }));
-    a.download = `hablar-${localDay()}.json`;
-    a.click();
-  });
-  document.getElementById("import").addEventListener("change", async (e) => {
-    try { S.importData(await e.target.files[0].text()); toast("Restored ✓"); } catch (err) { toast(err.message); }
-  });
+  bindBackup();
   document.getElementById("reset").addEventListener("click", () => {
     if (confirm("Erase all your progress and phrases on this device?")) { S.resetProgress(); toast("Progress erased"); }
   });

@@ -4,7 +4,7 @@ import { localDay, addDays } from "../public/js/progress.js";
 
 // A fake localStorage, with an old (v1) save in it to check migration.
 const mem = new Map();
-globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
 const yesterday = addDays(localDay(), -1);
 mem.set("hablar:v1", JSON.stringify({
   settings: { support: "echo" },
@@ -74,4 +74,65 @@ test("backups round-trip", () => {
   S.importData(json);
   assert.equal(S.stats().words > 0, true);
   assert.equal(S.skitProgress("tiendita").rounds, 3);
+});
+
+test("opening a skit or trying with nothing heard still counts as a day used", () => {
+  S.resetProgress();
+  S.startSkit("taqueria");
+  assert.equal(S.stats().daysUsed, 1);
+  assert.equal(S.stats().lines, 0); // nothing was heard, so no lines yet
+  S.resetProgress();
+  S.markActive();
+  assert.equal(S.stats().practicedToday, true);
+});
+
+test("the probe says storage works here", () => {
+  assert.equal(S.storageWorks(), true);
+});
+
+test("a download records when it happened and says what app it's from", () => {
+  const before = Date.now();
+  const file = JSON.parse(S.exportData());
+  assert.equal(file.app, "hablar");
+  assert.ok(S.lastBackup() >= before);
+});
+
+test("uploading merges with this device instead of replacing it", () => {
+  S.resetProgress();
+  // This device: round 1 of the taquería, practiced today, one word.
+  S.finishSkit("taqueria", 1);
+  S.learnWords(["chido"]);
+  const here = JSON.parse(S.exportData());
+  // The other device: round 3 of the taquería, round 1 of the tiendita, a day last week, other words.
+  const other = structuredClone(here);
+  other.skits = { taqueria: { plays: 5, done: 3, rounds: 3 }, tiendita: { plays: 1, done: 1, rounds: 1 } };
+  other.days = { "2026-01-05": { lines: 9, passed: 7, seconds: 30, skits: 1, reviews: 0 } };
+  other.words = { neta: { n: 2, first: 1 }, chido: { n: 4, first: 1 } };
+  other.phrases = {};
+  const r = S.importData(JSON.stringify(other));
+  assert.deepEqual(r, { days: 1, words: 1, phrases: 0, rounds: 3 });
+  assert.equal(S.skitProgress("taqueria").rounds, 3);
+  assert.equal(S.skitProgress("tiendita").rounds, 1);
+  const st = S.stats();
+  assert.equal(st.daysUsed, 2); // today + the other device's day
+  assert.equal(st.words, 2);
+  assert.equal(st.lines, 9);
+});
+
+test("merging the same phrase keeps the more-reviewed schedule", () => {
+  const a = { skits: {}, days: {}, words: {}, phrases: { "x|neta": { es: "neta", box: 1, due: "2026-11-14", reviews: 0, said: 1, at: 5 } } };
+  const b = { skits: {}, days: { "2026-11-13": { lines: 2 } }, words: {}, phrases: { "x|neta": { es: "neta", box: 3, due: "2026-11-20", reviews: 2, said: 3, at: 9 } } };
+  const m = S.mergeStates(a, b);
+  assert.equal(m.phrases["x|neta"].box, 3);
+  assert.equal(m.phrases["x|neta"].said, 3);
+  assert.equal(m.phrases["x|neta"].at, 5);
+  assert.equal(S.mergeStates(b, a).phrases["x|neta"].box, 3); // order doesn't matter
+  // Same day on both devices: the bigger count, not the sum (they may be the same practice).
+  const d = S.mergeStates({ ...a, days: { "2026-11-13": { lines: 5, seconds: 1 } } }, b).days["2026-11-13"];
+  assert.deepEqual(d, { lines: 5, seconds: 1 });
+});
+
+test("uploading something that isn't a backup is refused with a clear message", () => {
+  assert.throws(() => S.importData("not json"), /couldn’t be read/);
+  assert.throws(() => S.importData('{"hello": 1}'), /doesn’t look like/);
 });

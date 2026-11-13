@@ -57,8 +57,28 @@ function migrate(s) {
   return s;
 }
 
+let saveOk = true;
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage blocked */ }
+  try { localStorage.setItem(KEY, JSON.stringify(state)); saveOk = true; } catch { saveOk = false; /* storage blocked or full */ }
+}
+
+/**
+ * Can this browser keep progress? False in some private modes, with site data blocked,
+ * or when storage is full. The app warns instead of silently losing progress.
+ */
+export function storageWorks() {
+  try {
+    const k = `${KEY}:probe`;
+    localStorage.setItem(k, "1");
+    const ok = localStorage.getItem(k) === "1";
+    localStorage.removeItem(k);
+    return ok && saveOk;
+  } catch { return false; }
+}
+
+/** Ask the browser not to clear our data when space runs low (granted silently where allowed). */
+export async function askToKeepData() {
+  try { return (await navigator.storage?.persist?.()) ?? false; } catch { return false; }
 }
 
 export const settings = () => state.settings;
@@ -70,7 +90,13 @@ function today() {
   return (state.days[localDay()] ??= { lines: 0, passed: 0, seconds: 0, skits: 0, reviews: 0 });
 }
 
-/** Any spoken attempt counts as using the app today. */
+/** Practicing at all (opening a skit, listening, trying) counts as using the app today. */
+export function markActive() {
+  today();
+  save();
+}
+
+/** A spoken attempt that the speech checker heard. */
 export function recordAttempt({ seconds = 0, passed = false } = {}) {
   const d = today();
   d.lines++;
@@ -122,6 +148,7 @@ export function startSkit(id) {
   const p = (state.skits[id] ??= { plays: 0, done: 0, rounds: 0 });
   p.plays++;
   p.at = Date.now();
+  today();
   save();
 }
 
@@ -158,11 +185,61 @@ export function reviewPhrase(skit, es, ok) {
 
 // ───────────────────────── backup ─────────────────────────
 
-export function exportData() { return JSON.stringify(state, null, 2); }
-export function importData(json) {
-  const s = JSON.parse(json);
-  if (!s || typeof s.skits !== "object") throw new Error("That file doesn’t look like a Hablar backup.");
-  state = migrate({ ...structuredClone(DEFAULTS), ...s, settings: { ...DEFAULTS.settings, ...s.settings } });
+export function exportData() {
+  state.lastBackup = Date.now();
   save();
+  return JSON.stringify({ app: "hablar", version: 2, exported: new Date().toISOString(), ...state }, null, 2);
 }
+
+/** When the learner last downloaded a backup (ms), or null. */
+export const lastBackup = () => state.lastBackup ?? null;
+
+/**
+ * Upload a backup. It's merged with what's already here, so moving between devices never loses
+ * practice from either one: best rounds, every day used, every word and phrase (the later review
+ * schedule wins). Settings stay as they are on this device. Returns a short summary.
+ */
+export function importData(json) {
+  let s;
+  try { s = JSON.parse(json); } catch { throw new Error("That file isn’t a Hablar backup (it couldn’t be read)."); }
+  if (!s || typeof s.skits !== "object") throw new Error("That file doesn’t look like a Hablar backup.");
+  const incoming = migrate({ ...structuredClone(DEFAULTS), ...s, settings: { ...DEFAULTS.settings, ...s.settings } });
+  const before = stats();
+  state = mergeStates(state, incoming);
+  save();
+  if (!saveOk) throw new Error("This browser won’t save data (private browsing?). Your progress can’t be kept here.");
+  const after = stats();
+  return { days: after.daysUsed - before.daysUsed, words: after.words - before.words, phrases: after.phrases - before.phrases, rounds: after.roundsDone - before.roundsDone };
+}
+
+/** Combine two saves (pure). a's settings are kept. */
+export function mergeStates(a, b) {
+  const out = structuredClone(a);
+  for (const [id, p] of Object.entries(b.skits ?? {})) {
+    const q = out.skits[id];
+    out.skits[id] = !q ? { ...p } : {
+      plays: Math.max(q.plays ?? 0, p.plays ?? 0), done: Math.max(q.done ?? 0, p.done ?? 0),
+      rounds: Math.max(q.rounds ?? 0, p.rounds ?? 0), at: Math.max(q.at ?? 0, p.at ?? 0),
+    };
+  }
+  for (const [day, d] of Object.entries(b.days ?? {})) {
+    const e = out.days[day];
+    // The same day on two devices: the bigger count per field (we can't tell if they overlap).
+    out.days[day] = !e ? { ...d } : Object.fromEntries([...new Set([...Object.keys(e), ...Object.keys(d)])].map((k) => [k, Math.max(e[k] ?? 0, d[k] ?? 0)]));
+  }
+  for (const [w, e] of Object.entries(b.words ?? {})) {
+    const f = out.words[w];
+    out.words[w] = !f ? { ...e } : { n: Math.max(f.n, e.n), first: Math.min(f.first, e.first) };
+  }
+  for (const [k, p] of Object.entries(b.phrases ?? {})) {
+    const q = out.phrases[k];
+    if (!q) { out.phrases[k] = { ...p }; continue; }
+    // Keep the copy that was reviewed more recently (higher review count, then later due date).
+    const newer = (p.reviews ?? 0) > (q.reviews ?? 0) || ((p.reviews ?? 0) === (q.reviews ?? 0) && (p.due ?? "") > (q.due ?? ""));
+    out.phrases[k] = { ...(newer ? p : q), said: Math.max(q.said ?? 0, p.said ?? 0), at: Math.min(q.at ?? Infinity, p.at ?? Infinity) };
+  }
+  out.lastBackup = Math.max(a.lastBackup ?? 0, b.lastBackup ?? 0) || undefined;
+  return out;
+}
+
 export function resetProgress() { state.skits = {}; state.phrases = {}; state.words = {}; state.days = {}; save(); }
