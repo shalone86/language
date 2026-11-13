@@ -1,7 +1,7 @@
 // Offline support (same strategy as articulation): network first for the app so updates show
 // right away, cache first for fonts and voice clips. Speech checks always need the network.
 
-const VERSION = "v6";
+const VERSION = "v7";
 const SHELL = `shell-${VERSION}`;
 const RUNTIME = "runtime-v1";
 

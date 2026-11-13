@@ -58,54 +58,67 @@ def svg(bg=True, size=512, maskable=False):
     <!-- shooting star -->
     <path d="M60 300 L120 268" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
     <circle cx="122" cy="267" r="5" fill="#ffffff"/>
-    <!-- globe -->
+    <!-- globe, seen with the North Pole on top: ice cap, then the northern continents around it -->
     <circle cx="256" cy="640" r="300" fill="url(#glow)"/>
     <circle cx="256" cy="640" r="262" fill="url(#sea)" stroke="#bfefff" stroke-width="6"/>
     <g clip-path="url(#globe)">
-      <path d="M40 470 C80 420 150 410 170 440 C190 470 150 500 175 530 L60 560Z" fill="#3fbf7f"/>
-      <path d="M300 395 C350 380 420 400 440 440 C455 470 410 470 400 500 C390 530 330 520 320 480 C310 450 280 430 300 395Z" fill="#3fbf7f"/>
-      <path d="M200 520 C230 505 260 515 255 545 L210 560Z" fill="#3fbf7f"/>
-      <ellipse cx="256" cy="640" rx="262" ry="190" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="5"/>
-      <ellipse cx="256" cy="640" rx="140" ry="262" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="5"/>
+      <!-- land around the Arctic: North America (left), Europe and Asia (right) -->
+      <path d="M-10 500 C10 452 60 430 104 436 C140 440 150 462 128 478 C150 486 160 506 140 520 L-10 540Z" fill="#3fbf7f"/>
+      <path d="M352 440 C392 424 452 436 492 470 C512 488 520 510 522 540 L380 540 C392 512 356 500 340 474 C334 460 340 446 352 440Z" fill="#3fbf7f"/>
+      <path d="M236 498 C262 488 296 494 300 512 L292 540 L232 540Z" fill="#3fbf7f"/>
+      <!-- lines of latitude circling the pole, and meridians meeting at it -->
+      <ellipse cx="256" cy="452" rx="168" ry="44" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="4"/>
+      <ellipse cx="256" cy="506" rx="226" ry="60" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="4"/>
+      <g stroke="#ffffff" stroke-opacity="0.3" stroke-width="4" fill="none">
+        <path d="M256 392 L256 540"/><path d="M256 392 Q150 430 70 540"/><path d="M256 392 Q362 430 442 540"/>
+        <path d="M256 392 Q60 400 -20 470"/><path d="M256 392 Q452 400 532 470"/>
+      </g>
+      <!-- the polar ice cap -->
+      <path d="M96 420 C120 372 392 372 416 420 C424 438 396 430 380 440 C360 452 340 434 316 446 C292 458 268 440 244 450 C220 460 200 440 176 448 C152 456 132 436 112 440 C100 442 92 432 96 420Z" fill="#ffffff"/>
+      <path d="M150 414 C200 400 312 400 362 414" fill="none" stroke="#cfe9f7" stroke-width="5" stroke-linecap="round"/>
+      <!-- Greenland, still icy -->
+      <path d="M170 462 C190 452 214 460 210 478 C206 494 184 496 174 484Z" fill="#ffffff"/>
     </g>
-    <!-- umbrella pole (behind) -->
-    <path d="M150 392 L214 128" stroke="#f3e7d3" stroke-width="10" stroke-linecap="round"/>
+    <!-- umbrella pole (behind): striped like a North Pole marker -->
+    <path d="M156 398 L216 114" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+    <path d="M156 398 L216 114" stroke="#e4007c" stroke-width="12" stroke-dasharray="16 16" stroke-dashoffset="8"/>
     <!-- umbrella canopy -->
-    <g transform="translate(222 124) rotate(14)">
+    <g transform="translate(216 114) rotate(10)">
       <g clip-path="url(#canopy)">{wedges(6, R, -118, ["#e4007c", "#ffffff"])}</g>
       <path d="{canopy}" fill="none" stroke="#ffffff" stroke-width="7" stroke-linejoin="round"/>
       <circle cx="0" cy="-108" r="9" fill="#f3e7d3"/>
     </g>
-    <!-- chair frame -->
+    <!-- chair frame: crossed legs and an armrest -->
     <g stroke="#d9a066" stroke-width="11" stroke-linecap="round">
-      <path d="M166 226 L268 382"/>
-      <path d="M332 330 L222 382"/>
-      <path d="M226 342 L338 332"/>
+      <path d="M180 192 L296 384"/>
+      <path d="M340 322 L212 384"/>
     </g>
-    <!-- chair fabric: backrest + seat, striped -->
-    <path d="M160 222 L226 340 L334 330 L328 308 L240 314 L186 214Z" fill="url(#stripes)" stroke="{INK}" stroke-width="8" stroke-linejoin="round"/>
-    <!-- bear -->
+    <!-- chair fabric: an upright back and a flat seat, striped -->
+    <path d="M170 186 L214 340 L340 330 L338 310 L244 314 L204 178Z" fill="url(#stripes)" stroke="{INK}" stroke-width="8" stroke-linejoin="round"/>
+    <!-- bear, sitting up: torso upright, thighs on the seat, shins hanging over the front -->
     <g stroke="{INK}" stroke-width="8" stroke-linejoin="round">
-      <ellipse cx="270" cy="296" rx="66" ry="44" transform="rotate(-18 270 296)" fill="#ffffff"/>
-      <ellipse cx="338" cy="300" rx="44" ry="20" transform="rotate(-6 338 300)" fill="#ffffff"/>
-      <circle cx="377" cy="296" r="15" fill="#ffffff"/>
-      <circle cx="198" cy="186" r="15" fill="#ffffff"/>
-      <circle cx="238" cy="176" r="15" fill="#ffffff"/>
-      <circle cx="222" cy="218" r="44" fill="#ffffff"/>
-      <ellipse cx="258" cy="234" rx="24" ry="17" transform="rotate(10 258 234)" fill="#ffffff"/>
-      <ellipse cx="282" cy="292" rx="34" ry="13" transform="rotate(-24 282 292)" fill="#f1f5f9"/>
+      <circle cx="224" cy="174" r="15" fill="#ffffff"/>
+      <circle cx="264" cy="164" r="15" fill="#ffffff"/>
+      <ellipse cx="262" cy="276" rx="46" ry="58" transform="rotate(-8 262 276)" fill="#ffffff"/>
+      <ellipse cx="362" cy="350" rx="18" ry="34" transform="rotate(-12 362 350)" fill="#ffffff"/>
+      <ellipse cx="378" cy="382" rx="24" ry="13" transform="rotate(-6 378 382)" fill="#ffffff"/>
+      <ellipse cx="314" cy="314" rx="50" ry="22" transform="rotate(4 314 314)" fill="#ffffff"/>
+      <circle cx="248" cy="206" r="44" fill="#ffffff"/>
+      <ellipse cx="284" cy="222" rx="24" ry="17" transform="rotate(10 284 222)" fill="#ffffff"/>
+      <ellipse cx="298" cy="270" rx="34" ry="13" transform="rotate(6 298 270)" fill="#f1f5f9"/>
     </g>
-    <circle cx="198" cy="186" r="6" fill="#ffb3c7"/>
-    <circle cx="238" cy="176" r="6" fill="#ffb3c7"/>
-    <circle cx="279" cy="231" r="8" fill="{INK}"/>
-    <path d="M254 248 Q262 256 272 250" fill="none" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="224" cy="174" r="6" fill="#ffb3c7"/>
+    <circle cx="264" cy="164" r="6" fill="#ffb3c7"/>
+    <circle cx="305" cy="219" r="8" fill="{INK}"/>
+    <path d="M280 236 Q288 244 298 238" fill="none" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>
+    <path d="M366 386 h1 M378 388 h1 M390 386 h1" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>
     <!-- sunglasses -->
-    <path d="M198 206 L262 202" stroke="{INK}" stroke-width="6" stroke-linecap="round"/>
-    <rect x="203" y="202" width="24" height="17" rx="7" fill="{INK}"/>
-    <rect x="236" y="199" width="24" height="17" rx="7" fill="{INK}"/>
+    <path d="M224 194 L288 190" stroke="{INK}" stroke-width="6" stroke-linecap="round"/>
+    <rect x="229" y="190" width="24" height="17" rx="7" fill="{INK}"/>
+    <rect x="262" y="187" width="24" height="17" rx="7" fill="{INK}"/>
     <!-- drink -->
-    <path d="M304 262 L326 262 L322 290 L308 290Z" fill="#00c2b8" stroke="{INK}" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M318 262 L326 240" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>
+    <path d="M322 240 L344 240 L340 270 L326 270Z" fill="#00c2b8" stroke="{INK}" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M336 240 L344 218" stroke="{INK}" stroke-width="5" stroke-linecap="round"/>
   </g>
 </svg>'''
 open("logo.svg", "w").write(svg())
