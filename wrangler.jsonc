@@ -9,6 +9,8 @@
     "run_worker_first": ["/api/*"]
   },
   "ai": { "binding": "AI" },
+  // Progress saved under a save code, so it survives a phone that clears browser data.
+  "kv_namespaces": [{ "binding": "PROGRESS", "id": "14796f43088f476db6ebafcdcc837ed1" }],
   "observability": { "enabled": true },
   "workers_dev": true,
   "routes": [{ "pattern": "hablar.shalonely.com", "custom_domain": true }]

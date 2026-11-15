@@ -136,3 +136,32 @@ test("uploading something that isn't a backup is refused with a clear message", 
   assert.throws(() => S.importData("not json"), /couldn’t be read/);
   assert.throws(() => S.importData('{"hello": 1}'), /doesn’t look like/);
 });
+
+test("the online copy leaves out settings, and merging it in is quiet and additive", () => {
+  S.resetProgress();
+  let saves = 0;
+  const off = S.onSave(() => saves++);
+  assert.equal(S.hasProgress(), false);
+  S.finishSkit("taqueria", 1);
+  assert.equal(saves, 1); // a normal change tells sync.js
+  assert.equal(S.hasProgress(), true);
+  const snap = JSON.parse(S.snapshot());
+  assert.equal(snap.settings, undefined);
+  assert.equal(snap.cloud, undefined);
+  assert.equal(snap.skits.taqueria.rounds, 1);
+  const other = { skits: { tiendita: { plays: 1, done: 1, rounds: 2 } }, days: {}, words: { neta: { n: 1, first: 1 } }, phrases: {} };
+  assert.equal(S.mergeIn(JSON.stringify(other)), true);
+  assert.equal(saves, 1); // merging in doesn't trigger another upload
+  assert.equal(S.skitProgress("tiendita").rounds, 2);
+  assert.equal(S.skitProgress("taqueria").rounds, 1);
+  assert.equal(S.mergeIn(JSON.stringify(other)), false); // nothing new the second time
+  off();
+});
+
+test("the save code is kept on this device and survives merges", () => {
+  S.setCloud({ code: "OSO-7KQ2M-RX4PA", shown: true });
+  S.mergeIn(JSON.stringify({ skits: {}, days: {}, words: {}, phrases: {} }));
+  assert.equal(S.cloud().code, "OSO-7KQ2M-RX4PA");
+  S.resetProgress();
+  assert.equal(S.cloud().code, undefined);
+});

@@ -4,6 +4,9 @@
 //   GET  /api/health      → { stt, tts, backend, model, voices }
 //   POST /api/transcribe  → body: audio/wav (16 kHz mono) → { text, words }
 //   GET  /api/tts?text=…&voice=estrella → audio/mpeg
+//   POST /api/progress              → body: progress JSON → { code }   (new save code)
+//   GET  /api/progress/OSO-XXXXX-XXXXX → the saved progress
+//   PUT  /api/progress/OSO-XXXXX-XXXXX → body: progress JSON → { ok }  (replace; the app merges first)
 //   POST /api/judge       → body: {scene, context, intent, expected, said} → {ok, note}
 //                            ("does this reply make sense here?" for rounds without words)
 //
@@ -45,6 +48,8 @@ export default {
       return json({ error: "passcode required" }, 401);
     }
     try {
+      const pm = url.pathname.match(/^\/api\/progress(?:\/([^/]+))?$/);
+      if (pm) return await progress(request, env, pm[1]);
       switch (`${request.method} ${url.pathname}`) {
         case "GET /api/health":
           return json({ stt: !!env.AI, tts: !!env.AI, backend: "Cloudflare Workers AI", model: STT_MODEL.split("/").pop(), judge: !!env.AI, voices: TTS_VOICE_INFO });
@@ -100,6 +105,66 @@ async function transcribe(audio, env) {
   });
   const words = (out.segments ?? []).flatMap((s) => s.words ?? []).map((w) => ({ word: w.word, start: w.start, end: w.end }));
   return json({ text: (out.text ?? "").trim(), words });
+}
+
+// ── Save codes ──
+// A code is the only key to a learner's progress (no accounts), so it's long and random:
+// 10 characters from a 31-letter alphabet without look-alikes (no 0/O, 1/I/L) ≈ 50 bits.
+const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const CODE_RE = /^OSO-[2-9A-HJKMNP-Z]{5}-[2-9A-HJKMNP-Z]{5}$/;
+const MAX_PROGRESS_BYTES = 256 * 1024;
+const PROGRESS_TTL = 60 * 60 * 24 * 400; // kept 400 days after the last save
+
+export function newCode(rand = crypto.getRandomValues(new Uint8Array(10))) {
+  const c = [...rand].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+  return `OSO-${c.slice(0, 5)}-${c.slice(5)}`;
+}
+
+/** Tidy what people type: "oso 7kq2m rx4pa" → "OSO-7KQ2M-RX4PA". */
+export function cleanCode(raw) {
+  const c = String(raw ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^OSO/, "");
+  return c.length === 10 ? `OSO-${c.slice(0, 5)}-${c.slice(5)}` : null;
+}
+
+async function readProgressBody(request) {
+  const text = await request.text();
+  if (!text || text.length > MAX_PROGRESS_BYTES) return null;
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v === "object" && typeof v.skits === "object" ? text : null;
+  } catch { return null; }
+}
+
+async function progress(request, env, rawCode) {
+  if (!env.PROGRESS) return json({ error: "progress saving is not set up" }, 503);
+  if (!rawCode) {
+    if (request.method !== "POST") return json({ error: "not found" }, 404);
+    const body = await readProgressBody(request);
+    if (!body) return json({ error: "bad progress" }, 400);
+    let code;
+    for (let i = 0; i < 5; i++) {
+      code = newCode();
+      if (!(await env.PROGRESS.get(`p:${code}`))) break;
+    }
+    await env.PROGRESS.put(`p:${code}`, body, { expirationTtl: PROGRESS_TTL });
+    return json({ code });
+  }
+  const code = cleanCode(rawCode);
+  if (!code || !CODE_RE.test(code)) return json({ error: "That isn’t a save code. It looks like OSO-7KQ2M-RX4PA." }, 400);
+  const key = `p:${code}`;
+  if (request.method === "GET") {
+    const v = await env.PROGRESS.get(key);
+    if (!v) return json({ error: "No progress was found for that code. Check the letters and try again." }, 404);
+    return new Response(v, { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  }
+  if (request.method === "PUT") {
+    if (!(await env.PROGRESS.get(key))) return json({ error: "unknown code" }, 404); // codes are only made by POST
+    const body = await readProgressBody(request);
+    if (!body) return json({ error: "bad progress" }, 400);
+    await env.PROGRESS.put(key, body, { expirationTtl: PROGRESS_TTL });
+    return json({ ok: true });
+  }
+  return json({ error: "not found" }, 404);
 }
 
 async function judge(request, env) {

@@ -22,6 +22,7 @@ const DEFAULTS = {
   phrases: {}, // "skitId|es" → { es, en, skit, line, at, said, box, due, reviews, misses }
   words: {}, // normalized word → { n, first }
   days: {}, // "YYYY-MM-DD" → { lines, passed, seconds, skits, reviews }
+  cloud: {}, // { code: "OSO-XXXXX-XXXXX", savedAt, shown } — the online copy (see sync.js)
 };
 
 let state = load();
@@ -59,8 +60,35 @@ function migrate(s) {
 }
 
 let saveOk = true;
-function save() {
+const listeners = new Set();
+/** Save to this browser. Unless quiet, tell listeners (sync.js uploads a copy a few seconds later). */
+function save(quiet = false) {
   try { localStorage.setItem(KEY, JSON.stringify(state)); saveOk = true; } catch { saveOk = false; /* storage blocked or full */ }
+  if (!quiet) for (const fn of listeners) { try { fn(); } catch { /* a listener must never break saving */ } }
+}
+export function onSave(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
+// ───────────────────────── online copy (save code) ─────────────────────────
+
+export const cloud = () => state.cloud ?? (state.cloud = {});
+export function setCloud(patch) { state.cloud = { ...cloud(), ...patch }; save(true); }
+/** Is there anything worth saving yet? */
+export const hasProgress = () => Object.keys(state.days).length > 0 || Object.keys(state.skits).length > 0 || Object.keys(state.phrases).length > 0;
+/** Progress as JSON for the online copy (no settings: those stay per device). */
+export function snapshot() {
+  const { settings: _s, cloud: _c, ...rest } = state;
+  return JSON.stringify({ app: "skit-spanish", version: 2, ...rest });
+}
+/** Merge an online copy into this device without triggering another upload. Returns true if anything changed. */
+export function mergeIn(json) {
+  const s = JSON.parse(json);
+  if (!s || typeof s.skits !== "object") return false;
+  const incoming = migrate({ ...structuredClone(DEFAULTS), ...s, settings: { ...DEFAULTS.settings } });
+  const before = JSON.stringify([state.skits, state.days, state.words, state.phrases]);
+  state = mergeStates(state, incoming);
+  const changed = before !== JSON.stringify([state.skits, state.days, state.words, state.phrases]);
+  save(true);
+  return changed;
 }
 
 /**
@@ -220,7 +248,7 @@ export function mergeStates(a, b) {
     const q = out.skits[id];
     out.skits[id] = !q ? { ...p } : {
       plays: Math.max(q.plays ?? 0, p.plays ?? 0), done: Math.max(q.done ?? 0, p.done ?? 0),
-      rounds: Math.max(q.rounds ?? 0, p.rounds ?? 0), at: Math.max(q.at ?? 0, p.at ?? 0),
+      rounds: Math.max(q.rounds ?? 0, p.rounds ?? 0), ...(q.at || p.at ? { at: Math.max(q.at ?? 0, p.at ?? 0) } : {}),
     };
   }
   for (const [day, d] of Object.entries(b.days ?? {})) {
@@ -240,7 +268,8 @@ export function mergeStates(a, b) {
     out.phrases[k] = { ...(newer ? p : q), said: Math.max(q.said ?? 0, p.said ?? 0), at: Math.min(q.at ?? Infinity, p.at ?? Infinity) };
   }
   out.lastBackup = Math.max(a.lastBackup ?? 0, b.lastBackup ?? 0) || undefined;
+  if (!out.cloud?.code && b.cloud?.code) out.cloud = { ...b.cloud };
   return out;
 }
 
-export function resetProgress() { state.skits = {}; state.phrases = {}; state.words = {}; state.days = {}; save(); }
+export function resetProgress() { state.skits = {}; state.phrases = {}; state.words = {}; state.days = {}; state.cloud = {}; save(true); }

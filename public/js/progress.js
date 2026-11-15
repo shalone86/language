@@ -152,3 +152,7 @@ export function saidPhrase(heard, phrase) {
     return t && h.includes(` ${t} `);
   });
 }
+
+/** Browsers built into other apps (Messenger, Instagram, TikTok…) often throw saved data away. */
+export const inAppBrowser = (ua = "") =>
+  /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Snapchat|TikTok|musical_ly|Twitter|MicroMessenger|Pinterest|LinkedInApp|GSA\//.test(ua);

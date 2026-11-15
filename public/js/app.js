@@ -7,9 +7,10 @@ import { speak, stop, prefetch, playUrl, browserVoices } from "./tts.js";
 import { health, transcribe, judge } from "./api.js";
 import { scoreLine, isPass, soundTip, tokens as tokensOf } from "./score.js";
 import { phraseRanges, phrasesIn, buildReview, meVoice } from "./review.js";
-import { ROUNDS, nextRound, roundOpen, maskLine, relativeDay, localDay, addDays, saidPhrase, wordsOf } from "./progress.js";
+import { inAppBrowser, ROUNDS, nextRound, roundOpen, maskLine, relativeDay, localDay, addDays, saidPhrase, wordsOf } from "./progress.js";
 import * as S from "./store.js";
 import { sfx, installClickSounds } from "./sound.js";
+import { startSync, restore, onStatus, status as syncStatus, syncSoon } from "./sync.js";
 
 const app = document.getElementById("app");
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -138,9 +139,11 @@ function viewHome() {
       </p>
     </section>
     ${savingNotice()}
+    ${!S.hasProgress() && !S.cloud().code ? `<details class="note restore-home"><summary>Practiced before and lost your progress? Enter your save code</summary>${codeBoxHtml()}</details>` : ""}
     ${micSupported() ? "" : `<p class="note warn">This browser can’t record audio. You can still listen to every skit; try Chrome, Edge or Safari to speak.</p>`}
     ${LEVELS.map(levelHtml).join("")}
   `);
+  bindCodeBox(viewHome);
 }
 
 function levelHtml(L) {
@@ -726,6 +729,22 @@ function finishSkit() {
   li.querySelector("#next-round")?.addEventListener("click", () => startSkit(skit, nextR));
   scrollDown(li);
   confetti(li.querySelector(".big-rounds"));
+  showNewCode(li);
+}
+
+/** The first time a save code exists, show it on the finish screen (once). */
+function showNewCode(li) {
+  syncSoon(true).then(() => {
+    const c = S.cloud();
+    if (!c.code || c.shown || !li.isConnected) return;
+    S.setCloud({ shown: true });
+    li.querySelector(".row")?.insertAdjacentHTML("beforebegin", `
+      <div class="note savecode-new">
+        <p>☁️ <b>Your progress now has a save code:</b></p>
+        <p class="code-row"><b class="code big">${esc(c.code)}</b></p>
+        <p class="small">📸 Take a screenshot. If this phone ever loses your progress, type the code in <b>Progreso</b> to get everything back.</p>
+      </div>`);
+  });
 }
 
 // ───────────────────────── review (repaso) ─────────────────────────
@@ -859,6 +878,8 @@ function closeSheet() { document.getElementById("sheet")?.classList.remove("show
 
 /** Warnings when progress can't be kept, or is being kept somewhere unexpected. */
 function savingNotice() {
+  if (inAppBrowser(navigator.userAgent))
+    return `<p class="note warn">⚠️ <b>You’re in another app’s built-in browser</b>, which can forget your progress. Tap the <b>⋯</b> or <b>share</b> menu and choose <b>Open in Safari</b> or <b>Open in Chrome</b>.${S.cloud().code ? ` Your save code is <b class="code">${esc(S.cloud().code)}</b>.` : ""}</p>`;
   if (!S.storageWorks())
     return `<p class="note warn">⚠️ <b>This browser isn’t saving your progress</b> (private browsing, or site data is blocked). Use a normal window, or allow site data for this page, so your streak and words are kept.</p>`;
   if (location.hostname !== HOME_HOST && /workers\.dev$/.test(location.hostname))
@@ -893,6 +914,7 @@ function backupPanelHtml() {
   return `
     <section class="panel backup" id="backup">
       <h2>💾 Your progress</h2>
+      ${codeBoxHtml()}
       <p>It’s saved <b>in this browser, on this device</b> — no account needed. Last downloaded: <b>${esc(lastTxt)}</b>.</p>
       <div class="row">
         <button type="button" class="btn primary small" data-backup="down">⬇ Download my progress</button>
@@ -911,7 +933,51 @@ function backupPanelHtml() {
     </section>`;
 }
 
+/** The save code: shown big, with copy, and a box to bring progress back from a code. */
+function codeBoxHtml() {
+  const c = S.cloud();
+  const when = c.savedAt ? relativeDay(localDay(new Date(c.savedAt))) : null;
+  return `
+    <div class="savecode">
+      ${c.code ? `
+        <p class="small">Your <b>save code</b> keeps a copy of your progress online. Take a screenshot or write it down:</p>
+        <p class="code-row"><b class="code big">${esc(c.code)}</b> <button type="button" class="btn small" data-copy-code>📋 Copy</button></p>
+        <p class="muted small" data-sync-status>${syncLine(when)}</p>
+        <p class="small">If this phone ever loses your progress, or you get a new one, open the app, go to <b>Progreso</b>, and type this code below.</p>`
+      : `<p class="small">After your first practice you’ll get a <b>save code</b> that keeps a copy of your progress online, in case this phone clears it.</p>`}
+      <form class="restore-row" data-restore>
+        <label class="small" for="restore-code"><b>Have a save code?</b></label>
+        <input id="restore-code" name="code" placeholder="OSO-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button type="submit" class="btn small primary">Bring back my progress</button>
+      </form>
+    </div>`;
+}
+
+function syncLine(when) {
+  if (syncStatus.state === "saving") return "☁️ Saving online…";
+  if (syncStatus.state === "offline") return "☁️ Couldn’t reach the server just now. It will try again; your progress is safe on this device.";
+  return when ? `☁️ Saved online ${when === "today" ? "today" : when}.` : "☁️ Not saved online yet.";
+}
+
+function bindCodeBox(rerender) {
+  app.querySelector("[data-copy-code]")?.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(S.cloud().code); toast("Save code copied ✓"); } catch { toast(S.cloud().code, 6000); }
+  });
+  app.querySelector("[data-restore]")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button");
+    btn.disabled = true;
+    try {
+      const r = await restore(e.target.code.value);
+      const bits = [r.rounds && plural(r.rounds, "round"), r.words && plural(r.words, "word"), r.phrases && plural(r.phrases, "phrase"), r.days && plural(r.days, "day")].filter(Boolean);
+      toast(bits.length ? `Welcome back! Restored ${bits.join(", ")} ✓` : "Code linked ✓ — this device now saves to it", 4500);
+      rerender?.();
+    } catch (err) { toast(err.message, 5000); btn.disabled = false; }
+  });
+}
+
 function bindBackup(rerender) {
+  bindCodeBox(rerender);
   app.querySelector("[data-backup=down]")?.addEventListener("click", () => { downloadBackup(); rerender?.(); });
   app.querySelector("[data-backup=up]")?.addEventListener("change", (e) => uploadBackup(e.target.files[0], rerender));
 }
@@ -1099,4 +1165,10 @@ document.addEventListener("click", (e) => {
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 window.addEventListener("hashchange", route);
 installClickSounds();
+startSync();
+onStatus(() => {
+  const el = document.querySelector("[data-sync-status]");
+  const c = S.cloud();
+  if (el) el.textContent = syncLine(c.savedAt ? relativeDay(localDay(new Date(c.savedAt))) : null);
+});
 route();

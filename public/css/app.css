@@ -353,3 +353,16 @@ a.skit-card:hover { transform: translateY(-3px) rotate(-1deg); border-color: var
   .topbar { gap: 6px; }
 }
 @media (max-width: 340px) { .brand-text small { display: none; } }
+
+/* ── save code ── */
+.code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap; }
+.code.big { font-size: 1.35rem; padding: 4px 12px; border-radius: 10px; background: var(--gold-soft); border: 2px dashed var(--gold); display: inline-block; }
+.code-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0; }
+.savecode { border-bottom: 2px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+.restore-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.restore-row label { flex-basis: 100%; }
+.restore-row input { flex: 1 1 180px; font: 600 1rem ui-monospace, Menlo, monospace; text-transform: uppercase; padding: 8px 12px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface-2); color: var(--text); }
+.restore-home summary { cursor: pointer; font-weight: 800; color: var(--accent-strong); }
+.restore-home .savecode { border: 0; margin: 0; padding: 0; }
+.savecode-new { text-align: left; background: var(--gold-soft); border-color: transparent; }
+.finish .savecode-new .code-row { justify-content: center; }
