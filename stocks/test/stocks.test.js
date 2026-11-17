@@ -170,6 +170,7 @@ test("judge prompt and answers", () => {
   assert.match(user.content, /Student answered: "money buys less"/);
   assert.deepEqual(parseJudge({ response: '{"ok": true, "note": "Yes!"}' }), { ok: true, note: "Yes!" });
   assert.equal(parseJudge({ response: "dunno" }), null);
+  assert.equal(parseJudge({ response: '{"ok": false, "note": "you could add why"}' }).note, "You could add why");
 });
 
 const kv = () => { const m = new Map(); return { get: async (k) => m.get(k) ?? null, put: async (k, v) => m.set(k, v) }; };

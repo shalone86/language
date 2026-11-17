@@ -56,5 +56,6 @@ export function parseJudge(out) {
   const ok = v.ok === true || v.ok === "true";
   const okFalse = v.ok === false || v.ok === "false";
   if (!ok && !okFalse) return null;
-  return { ok, note: clip(v.note ?? v.reason ?? "", 240) };
+  const note = clip(v.note ?? v.reason ?? "", 240);
+  return { ok, note: note.charAt(0).toUpperCase() + note.slice(1) };
 }
