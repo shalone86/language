@@ -27,7 +27,8 @@ export function judgeMessages(r) {
     "ok=false when the main idea is wrong, missing, off-topic, or too vague to show understanding (like 'it's good' or 'I don't know').",
     "The answer may come from speech-to-text, so ignore spelling and punctuation.",
     "Never give investment advice. Only judge the explanation.",
-    "Answer with JSON only: {\"ok\": true or false, \"note\": \"one short, friendly sentence. If ok=false, say the key thing they missed.\"}",
+    "Write the note directly to the student, using \"you\" (never \"they\" or \"the student\").",
+    "Answer with JSON only: {\"ok\": true or false, \"note\": \"one short, friendly sentence. If ok=false, say the key thing you'd add.\"}",
   ].join("\n");
   const user = [
     r.topic && `Topic: ${r.topic}`,
