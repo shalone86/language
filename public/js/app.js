@@ -1163,6 +1163,11 @@ document.addEventListener("click", (e) => {
 });
 
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+// A link to the page you're already on (like ✕ in a skit) re-opens it; the browser alone wouldn't.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.('a[href^="#"]');
+  if (a && a.getAttribute("href") === location.hash) { e.preventDefault(); route(); }
+});
 window.addEventListener("hashchange", route);
 installClickSounds();
 startSync();

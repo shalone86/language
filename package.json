@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js stocks/test/*.test.js",
+    "deploy:stocks": "wrangler deploy -c stocks/wrangler.jsonc",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
