@@ -4,7 +4,8 @@
 
 import { SKITS, LEVELS, skitById, skitsInLevel, allTerms } from "./data/skits.js";
 import { ROUNDS, nextRound, roundOpen, relativeDay, localDay, addDays, inAppBrowser } from "./progress.js";
-import { matchFill, checkNumber, keywordCheck, modeFor, buildQuiz } from "./grade.js";
+import { keywordCheck, buildQuiz } from "./grade.js";
+import { scoreLine, isPass, maskLine, turnMode, acceptsOwnWords, echoes, tokens as tokensOf } from "./speech.js";
 import { renderChart, hitTarget } from "./chart.js";
 import { Recorder, micSupported } from "./audio.js";
 import { speak, stop, prefetch, browserVoices } from "./tts.js";
@@ -251,6 +252,11 @@ function viewSkit(id, chosen) {
             <b>${r.n <= done ? "✓" : open ? r.n : "🔒"} ${esc(r.name)}</b><span>${esc(r.blurb)}</span></button>`;
         }).join("")}
       </div>
+      <div class="how">${round === 1
+        ? skit.level <= 2 ? "👂 → 🎙️ You’ll hear each of your lines first. Then say it out loud." : "📖 → 🎙️ Read your line and say it out loud. Tap 👂 to hear it first."
+        : round === 2 ? `🧩 → 🎙️ The key words are hidden. Say the whole line.${skit.level >= 3 ? " If you know it, your own correct wording counts too." : ""}`
+        : "💭 → 🎙️ Just the question. Answer out loud in your own words: anything that’s right counts."}
+        <br><small>No mic handy? Tap ⌨️ to type instead.</small></div>
       <h2>Terms in this skit <small>tap for the meaning</small></h2>
       <div class="chips">${skit.terms.map((t, i) => `<button type="button" class="chip" data-term="${i}">${esc(t.t)}</button>`).join("")}</div>
       <div class="toggles">
@@ -337,124 +343,191 @@ async function advance() {
   if (P && P.token === tok) finishSkit();
 }
 
-/** The learner's turn: a card with the question, in the right mode for this round. */
+/** The voice that says "your" lines (round 1 echo and 👂). */
+const ME_VOICE = { voice: "arcas", gender: "m" };
+
+/** The line you're meant to say, and the explanation shown once you've said it. */
+const lineOf = (turn) => turn.say ?? turn.choices?.find((c) => c.ok)?.t ?? turn.explain?.model ?? "";
+const whyOf = (turn) => turn.choices?.find((c) => c.ok)?.why ?? "";
+
+/**
+ * The learner's turn, Skit Spanish style: say your line out loud.
+ * Round 1 shows it (and plays it first in levels 1–2), round 2 hides the key words,
+ * round 3 shows only the question. Chart turns are tapped instead.
+ */
 function renderTurn(turn) {
   P.tries = 0;
   P.resolved = false;
-  const mode = modeFor(turn, P.round);
+  P.peeked = false;
+  const mode = turnMode(turn, P.round);
   const li = document.createElement("li");
   li.className = `turn mode-${mode}`;
   li.dataset.mode = mode;
-  const ask = mode === "explain" ? turn.explain.prompt : turn.ask;
-  let body = "";
-  if (mode === "choice") {
-    const opts = shuffle(turn.choices.map((c, k) => ({ ...c, k })));
-    body = `<div class="choices">${opts.map((o) => `<button type="button" class="choice" data-k="${o.k}">${esc(o.t)}</button>`).join("")}</div>`;
-  } else if (mode === "fill") {
-    const [a, b] = turn.fill.text.split("___");
-    body = `<form class="answer-row" data-answer><p class="fill-text">${esc(a)}<input name="a" class="blank-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Missing word">${esc(b ?? "")}</p><button class="btn primary small">Check</button></form>`;
-  } else if (mode === "number") {
-    const n = turn.number;
-    body = `<form class="answer-row" data-answer>${n.prefix ? `<span class="affix">${esc(n.prefix)}</span>` : ""}<input name="a" inputmode="decimal" class="num-in" autocomplete="off" aria-label="Your answer">${n.suffix ? `<span class="affix">${esc(n.suffix.trim())}</span>` : ""}<button class="btn primary small">Check</button></form>`;
-  } else if (mode === "explain") {
-    body = `<form class="explain" data-answer>
-      <textarea name="a" rows="3" placeholder="Type it, or tap 🎙️ and say it…"></textarea>
-      <div class="row">${micSupported() ? `<button type="button" class="btn small mic-btn" data-mic>🎙️ Say it</button>` : ""}<button class="btn primary small">Check</button></div>
-    </form>`;
-  } else if (mode === "chart") {
-    body = `<div class="chart-box" data-chart>${renderChart(turn.chart).svg}</div><p class="muted small">Tap the chart.</p>`;
+  if (mode === "chart") {
+    li.innerHTML = `<span class="name">Your turn</span><p class="ask">${esc(turn.ask)}</p>
+      <div class="chart-box" data-chart>${renderChart(turn.chart).svg}</div><p class="muted small">Tap the chart.</p><div class="feedback" aria-live="polite"></div>`;
+    document.getElementById("convo").append(li);
+    scrollDown(li);
+    bindChart(li, turn);
+    return;
   }
-  li.innerHTML = `<span class="name">Your turn${P.round > 1 && mode !== "chart" ? ` · ${esc(ROUNDS[P.round - 1].name)}` : ""}</span>
-    ${turn.chart && mode !== "chart" ? `<div class="chart-box static">${renderChart(turn.chart).svg}</div>` : ""}
-    <p class="ask">${esc(ask)}</p>${body}<div class="feedback" aria-live="polite"></div>`;
+  const line = lineOf(turn);
+  const own = acceptsOwnWords(mode, P.skit.level);
+  const shown = mode === "repeat" ? `<p class="line">${esc(line)}</p>`
+    : mode === "blanks" ? `<p class="line masked">${maskLine(line, turn.term ?? "").map((p) => (p.hidden ? `<button type="button" class="blank" data-word="${esc(p.text)}" style="--w:${Math.max(2, p.text.length)}ch" aria-label="hidden word, tap to show">___</button>` : esc(p.text))).join("")}</p>`
+    : `<p class="line veiled" aria-hidden="true">${esc(line)}</p>`;
+  li.innerHTML = `
+    <span class="name">Your turn · ${esc(ROUNDS[P.round - 1].name)}</span>
+    ${turn.chart ? `<div class="chart-box static">${renderChart(turn.chart).svg}</div>` : ""}
+    <p class="ask">${esc(turn.ask)}</p>
+    ${shown}
+    ${own ? `<p class="muted small">${mode === "free" ? "Say it your way. Any answer that’s right counts." : "Say the line, or put it your own way if you know it."}</p>` : ""}
+    <div class="speak-row">
+      <button type="button" class="tool" data-act="hear" aria-label="Hear the line">👂<span>Hear</span></button>
+      <button type="button" class="mic" data-act="mic" data-own-sound ${micSupported() ? "" : "disabled"} aria-label="Record your answer"><span>🎙️</span></button>
+      <button type="button" class="tool" data-act="type" aria-label="Type instead">⌨️<span>Type</span></button>
+      ${mode !== "repeat" ? `<button type="button" class="tool" data-act="peek" aria-label="Show the line">👀<span>Peek</span></button>` : ""}
+      <button type="button" class="tool" data-act="skip" aria-label="Skip">⏭<span>Skip</span></button>
+    </div>
+    <form class="type-row" data-type hidden><input name="a" autocomplete="off" placeholder="Type your answer…" aria-label="Your answer"><button class="btn primary small">Check</button></form>
+    <p class="mic-label muted small">${micSupported() ? "Tap 🎙️ and say it out loud" : "This browser can’t record. Tap ⌨️ to type it."}</p>
+    <div class="feedback" aria-live="polite"></div>`;
   document.getElementById("convo").append(li);
   scrollDown(li);
-  bindTurn(li, turn, mode);
+  bindSpeak(li, turn, mode, line);
+  if (echoes(mode, P.skit.level) && S.settings().speak) speak(line, ME_VOICE).catch(() => {});
 }
 
-function bindTurn(li, turn, mode) {
-  if (mode === "choice") {
-    li.querySelectorAll(".choice").forEach((b) => b.addEventListener("click", () => {
-      if (P.resolved) return;
-      const c = turn.choices[+b.dataset.k];
-      P.tries++;
-      b.classList.add(c.ok ? "right" : "wrong");
-      b.disabled = true;
-      if (c.ok) resolve(li, turn, true, c.why);
-      else { sfx.oops(); feedback(li, "try", `<b>Not quite.</b> ${esc(c.why)}`); }
-    }));
+function bindSpeak(li, turn, mode, line) {
+  const act = (name) => li.querySelector(`[data-act=${name}]`);
+  act("hear").addEventListener("click", () => { if (mode !== "repeat") P.peeked = true; speak(line, { ...ME_VOICE, slow: P.tries > 0 }).catch((e) => toast(e.message)); });
+  act("mic").addEventListener("click", () => record(li, turn, mode, line));
+  act("type").addEventListener("click", () => { const f = li.querySelector("[data-type]"); f.hidden = !f.hidden; if (!f.hidden) f.a.focus(); });
+  act("peek")?.addEventListener("click", () => {
+    P.peeked = true;
+    const el = li.querySelector(".line");
+    el.classList.remove("veiled", "masked");
+    el.removeAttribute("aria-hidden");
+    el.textContent = line;
+  });
+  act("skip").addEventListener("click", () => resolve(li, turn, false, `The line: <b>“${esc(line)}”</b> ${esc(whyOf(turn))}`, true));
+  li.querySelectorAll(".blank").forEach((b) => b.addEventListener("click", () => { P.peeked = true; b.replaceWith(document.createTextNode(b.dataset.word)); }));
+  li.querySelector("[data-type]").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = e.target.a.value.trim();
+    if (v) check(li, turn, mode, line, v);
+  });
+}
+
+/** Tap 🎙️ to start, tap again (or pause) to stop; then Whisper writes down what was said. */
+async function record(li, turn, mode, line) {
+  if (!P || P.resolved || P.busy) return;
+  const btn = li.querySelector("[data-act=mic]"), label = li.querySelector(".mic-label");
+  if (P.rec?.state === "recording") {
+    P.busy = true;
+    btn.classList.remove("on");
+    label.textContent = "Checking…";
+    const take = await P.rec.stop();
+    P.busy = false;
+    if (!take?.speech) { label.textContent = "I didn’t catch that. Tap 🎙️ and say it a little louder."; return; }
+    try {
+      const { text } = await transcribe(take.wav);
+      if (!P || P.resolved) return;
+      await check(li, turn, mode, line, text);
+    } catch (e) { label.textContent = e.message; }
+    return;
   }
-  if (mode === "fill" || mode === "number") {
-    const form = li.querySelector("[data-answer]");
-    form.querySelector("input").focus({ preventScroll: true });
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (P.resolved) return;
-      const v = form.a.value.trim();
-      if (!v) return;
-      P.tries++;
-      const ok = mode === "fill" ? matchFill(v, turn.fill.answers) : checkNumber(v, turn.number).ok;
-      if (ok) return resolve(li, turn, true, turn.choices?.find((c) => c.ok)?.why);
-      sfx.oops();
-      const answer = mode === "fill" ? turn.fill.answers[0] : `${turn.number.prefix ?? ""}${turn.number.answer}${turn.number.suffix ?? ""}`;
-      if (P.tries >= 2) return resolve(li, turn, false, `The answer is <b>${esc(answer)}</b>. ${esc(turn.choices?.find((c) => c.ok)?.why ?? "")}`, true);
-      const hint = mode === "fill" ? `Hint: it starts with “${esc(turn.fill.answers[0][0].toUpperCase())}”.` : "Check your math and try once more.";
-      feedback(li, "try", `<b>Not quite.</b> ${hint}`);
-      form.a.select();
+  stop();
+  P.rec = new Recorder();
+  try {
+    await P.rec.start({
+      maxMs: mode === "free" ? 45000 : 15000, silenceMs: mode === "free" ? 2200 : 1400,
+      onLevel: (l) => btn.style.setProperty("--level", l.toFixed(2)),
+      onAutoStop: () => record(li, turn, mode, line),
     });
+    btn.classList.add("on");
+    label.textContent = "Listening… tap again when you’re done";
+  } catch (e) { toast(e.message, 5000); }
+}
+
+/** Grade what was said or typed. Exact lines in early rounds; own correct wording when allowed. */
+async function check(li, turn, mode, line, said) {
+  if (!P || P.resolved) return;
+  const tok = P.token;
+  P.tries++;
+  const r = scoreLine(line, said);
+  const label = li.querySelector(".mic-label");
+  if (r.result === "nothing") { P.tries--; label.textContent = "I didn’t catch that. Tap 🎙️ and say it a little louder."; return; }
+  if (isPass(r)) return resolve(li, turn, true, whyOf(turn), false, { said, words: r.words, line });
+  if (acceptsOwnWords(mode, P.skit.level)) {
+    label.textContent = "Checking your answer…";
+    let v;
+    try {
+      v = await judge({ topic: turn.term ?? P.skit.title, question: `${contextLine()} ${turn.ask}`.trim(), model: `${line} ${whyOf(turn)}`.trim(), keys: turn.explain?.keys ?? [], said });
+    } catch {
+      v = turn.explain?.keys ? keywordCheck(said, turn.explain.keys) : { ok: r.score >= 0.5 };
+    }
+    if (!P || P.token !== tok) return;
+    label.textContent = "";
+    if (v.ok) return resolve(li, turn, true, `${v.note ? `${esc(v.note)} ` : ""}${esc(whyOf(turn))}<span class="model">The script says: “${esc(line)}”</span>`, false, { said, judged: !!v.note });
+    sfx.oops();
+    feedback(li, "try", `<b>Not quite.</b> ${esc(v.note || "That doesn’t answer it yet.")} <span class="heard">I heard: “${esc(said)}”</span>`);
+  } else {
+    sfx.oops();
+    label.textContent = "";
+    const missed = r.words.filter((w) => w.status !== "ok").length;
+    feedback(li, "try", `<b>${pick(["Almost!", "Close!", "Once more!"])}</b> ${plural(missed, "word")} didn’t come through. Tap 👂 to hear it, then try again. <span class="heard">I heard: “${esc(said)}”</span>`);
+    if (mode === "repeat") paintLine(li, line, r.words); // round 2 keeps its blanks hidden
   }
-  if (mode === "explain") {
-    const form = li.querySelector("[data-answer]");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (P.resolved) return;
-      const v = form.a.value.trim();
-      if (!v) return;
-      P.tries++;
-      const btn = form.querySelector(".btn.primary");
-      btn.disabled = true;
-      feedback(li, "", "Checking…");
-      const tok = P.token;
-      let verdict;
-      try {
-        verdict = await judge({ topic: turn.term ?? P.skit.title, question: turn.explain.prompt, model: turn.explain.model, keys: turn.explain.keys, said: v });
-      } catch {
-        const k = keywordCheck(v, turn.explain.keys);
-        verdict = { ok: k.ok, note: k.ok ? "" : "Try to cover the main idea in a sentence or two." };
-      }
-      if (!P || P.token !== tok) return;
-      btn.disabled = false;
-      if (verdict.ok) return resolve(li, turn, true, `${esc(verdict.note)} <span class="model">A pro might put it: “${esc(turn.explain.model)}”</span>`);
-      sfx.oops();
-      if (P.tries >= 2) return resolve(li, turn, false, `${esc(verdict.note)} <span class="model">Here’s one way to say it: “${esc(turn.explain.model)}”</span>`, true);
-      feedback(li, "try", `<b>Almost.</b> ${esc(verdict.note || "Add a bit more about the main idea.")}`);
-    });
-    li.querySelector("[data-mic]")?.addEventListener("click", (e) => dictate(e.currentTarget, form.a));
-  }
-  if (mode === "chart") {
-    const box = li.querySelector("[data-chart]");
-    box.addEventListener("click", (e) => {
-      if (P.resolved) return;
-      const svg = box.querySelector("svg");
-      const r = svg.getBoundingClientRect();
-      const { width, height } = svg.viewBox.baseVal;
-      const tap = renderChart(turn.chart).map(((e.clientX - r.left) / r.width) * width, ((e.clientY - r.top) / r.height) * height);
-      const { closes } = renderChart(turn.chart);
-      const ok = hitTarget(turn.target, tap, closes);
-      P.tries++;
-      if (ok) {
-        box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: true }, reveal: turn.target }).svg;
-        return resolve(li, turn, true, "");
-      }
-      sfx.oops();
-      if (P.tries >= 3) {
-        box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: false }, reveal: turn.target }).svg;
-        return resolve(li, turn, false, "Here’s where it is (shaded).", true);
-      }
-      box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: false } }).svg;
-      feedback(li, "try", `<b>Not there.</b> ${P.tries === 2 ? chartHint(turn) : "Try again."}`);
-    });
-  }
+  if (P.tries >= 2) li.querySelector("[data-act=skip]")?.classList.add("push");
+}
+
+/** The coach's last line before this turn, for the meaning check. */
+function contextLine() {
+  for (let k = P.i - 1; k >= 0; k--) { const l = P.skit.lines[k]; if (l.who !== "me") return `${P.skit.cast[l.who].name}: ${l.text}`; }
+  return "";
+}
+
+/** Color the words of the line by how they came through (like Skit Spanish). */
+function paintLine(li, line, words) {
+  const el = li.querySelector(".line");
+  if (!el || li.dataset.mode === "free") return;
+  let k = 0;
+  el.classList.remove("masked");
+  el.innerHTML = line.split(/(\s+)/).map((part) => {
+    if (!part.trim()) return part;
+    const n = tokensOf(part).length;
+    const ws = words.slice(k, k + n);
+    k += n;
+    if (!ws.length) return esc(part);
+    const status = ws.some((w) => w.status === "changed" || w.status === "missed") ? "changed" : ws.some((w) => w.status === "close") ? "close" : "ok";
+    return `<span class="w ${status}">${esc(part)}</span>`;
+  }).join("");
+}
+
+function bindChart(li, turn) {
+  const box = li.querySelector("[data-chart]");
+  box.addEventListener("click", (e) => {
+    if (P.resolved) return;
+    const svg = box.querySelector("svg");
+    const r = svg.getBoundingClientRect();
+    const { width, height } = svg.viewBox.baseVal;
+    const chart = renderChart(turn.chart);
+    const tap = chart.map(((e.clientX - r.left) / r.width) * width, ((e.clientY - r.top) / r.height) * height);
+    const ok = hitTarget(turn.target, tap, chart.closes);
+    P.tries++;
+    if (ok) {
+      box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: true }, reveal: turn.target }).svg;
+      return resolve(li, turn, true, "");
+    }
+    sfx.oops();
+    if (P.tries >= 3) {
+      box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: false }, reveal: turn.target }).svg;
+      return resolve(li, turn, false, "Here’s where it is (shaded).", true);
+    }
+    box.innerHTML = renderChart(turn.chart, { mark: { ...tap, ok: false } }).svg;
+    feedback(li, "try", `<b>Not there.</b> ${P.tries === 2 ? chartHint(turn) : "Try again."}`);
+  });
 }
 
 function chartHint(turn) {
@@ -471,9 +544,10 @@ function feedback(li, kind, html) {
 }
 
 /** A turn is done: right (maybe after tries) or shown after too many misses. */
-function resolve(li, turn, ok, why, revealed = false) {
+function resolve(li, turn, ok, why, revealed = false, heard = null) {
   P.resolved = true;
-  const firstTry = ok && P.tries === 1;
+  if (P.rec?.state === "recording") P.rec.cancel();
+  const firstTry = ok && P.tries === 1 && !P.peeked;
   if (firstTry) P.firstTry++;
   S.recordAnswer({ correct: firstTry });
   if (ok && turn.term) {
@@ -481,11 +555,21 @@ function resolve(li, turn, ok, why, revealed = false) {
     if (term) { S.learnTerm(P.skit.id, term); P.practiced.add(term.t); }
   }
   li.classList.add(ok ? "done-ok" : "done-shown");
-  li.querySelectorAll("button.choice, input, textarea, [data-mic]").forEach((el) => { el.disabled = true; });
-  feedback(li, ok ? "good" : "shown", `${ok ? `<b>${pick(["Nice!", "That’s it!", "Exactly.", "You got it."])}</b> ` : ""}${why ?? ""}
+  li.querySelectorAll(".speak-row button, .type-row input, .type-row button").forEach((el) => { el.disabled = true; });
+  li.querySelector(".mic-label")?.remove();
+  li.querySelector(".type-row")?.setAttribute("hidden", "");
+  // Show the full line now, colored by how it came through when we know.
+  const lineEl = li.querySelector(".line");
+  if (lineEl) {
+    lineEl.classList.remove("veiled", "masked");
+    lineEl.removeAttribute("aria-hidden");
+    if (heard?.words && li.dataset.mode !== "free") paintLine(li, heard.line, heard.words); else lineEl.textContent = lineOf(turn);
+  }
+  feedback(li, ok ? "good" : "shown", `${ok && !heard?.judged ? `<b>${pick(["Nice!", "That’s it!", "Exactly.", "You got it."])}</b> ` : ""}${why ?? ""}
     <div class="row"><button type="button" class="btn primary small" data-next>Next ›</button></div>`);
   if (ok) sfx.right();
-  const say = turn.say ?? turn.choices?.find((c) => c.ok)?.t;
+  // Your bubble: your own words when you used them, otherwise the line.
+  const say = heard?.said && !heard.words ? heard.said : lineOf(turn);
   const next = li.querySelector("[data-next]");
   next.focus({ preventScroll: true });
   next.addEventListener("click", () => {
@@ -501,31 +585,6 @@ function resolve(li, turn, ok, why, revealed = false) {
   }, { once: true });
   scrollDown(li);
   if (revealed) li.classList.add("revealed");
-}
-
-/** Speak an explanation instead of typing it (Whisper turns it into text). */
-async function dictate(btn, textarea) {
-  if (!P) return;
-  if (P.rec?.state === "recording") {
-    btn.disabled = true;
-    btn.textContent = "⏳ Listening…";
-    const take = await P.rec.stop();
-    btn.disabled = false;
-    btn.textContent = "🎙️ Say it";
-    if (!take?.speech) return toast("I didn’t catch that. Try again a little louder.");
-    try {
-      const { text } = await transcribe(take.wav);
-      textarea.value = [textarea.value.trim(), text].filter(Boolean).join(" ");
-      textarea.focus();
-    } catch (e) { toast(e.message); }
-    return;
-  }
-  stop();
-  P.rec = new Recorder();
-  try {
-    await P.rec.start({ maxMs: 60000, silenceMs: 2500, onAutoStop: () => dictate(btn, textarea) });
-    btn.textContent = "■ Done";
-  } catch (e) { toast(e.message, 5000); }
 }
 
 function finishSkit() {

@@ -60,9 +60,9 @@ export function relativeDay(day, today = localDay()) {
 
 // Every skit is played three times, with less help each time.
 export const ROUNDS = [
-  { n: 1, name: "Pick it", blurb: "Choose the right answer. Every option explains why it’s right or wrong." },
-  { n: 2, name: "Fill it in", blurb: "No options: type the key word or number yourself." },
-  { n: 3, name: "Say it your way", blurb: "Explain it in your own words, typed or spoken. Anything that shows you understand counts." },
+  { n: 1, name: "Say it", blurb: "Your line is on screen. Say it out loud (in levels 1–2 you hear it first)." },
+  { n: 2, name: "Fill the gaps", blurb: "The key words are hidden. Say the whole line. From level 3, your own correct wording counts too." },
+  { n: 3, name: "Your own words", blurb: "Just the question. Answer out loud your way: anything that’s right counts." },
 ];
 
 /** The round to play next: the first not yet finished, or the last one if all are done. */

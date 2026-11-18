@@ -1,7 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { SKITS, LEVELS, allTerms } from "../public/js/data/skits.js";
-import { norm, matchFill, parseNumber, checkNumber, keywordCheck, modeFor, buildQuiz } from "../public/js/grade.js";
+import { norm, matchFill, parseNumber, checkNumber, keywordCheck, buildQuiz } from "../public/js/grade.js";
+import { tokens, scoreLine, isPass, maskLine, turnMode, acceptsOwnWords, echoes } from "../public/js/speech.js";
 import { renderChart, hitTarget, goldenCross, rsi, sma, makeSeries } from "../public/js/chart.js";
 import { cleanJudgeRequest, judgeMessages, parseJudge } from "../public/js/judge.js";
 import worker from "../worker/index.js";
@@ -33,18 +34,17 @@ test("every level has enough skits to open the next", () => {
   for (const L of LEVELS.slice(1)) assert.ok(SKITS.filter((s) => s.level === L.n - 1).length >= L.unlockAfter);
 });
 
-test("every turn is answerable in all three rounds", () => {
+test("every turn can be played in all three rounds", () => {
   for (const s of SKITS) for (const t of s.lines.filter((l) => l.who === "me")) {
-    for (const r of [1, 2, 3]) {
-      const mode = modeFor(t, r);
-      const ok = { choice: t.choices?.some((c) => c.ok), fill: t.fill?.answers?.length, number: t.number && Number.isFinite(t.number.answer), explain: t.explain?.model && t.explain?.keys?.length, chart: t.chart && t.target }[mode];
-      assert.ok(ok, `${s.id} “${t.ask}” round ${r} (${mode}) can't be answered`);
-    }
+    if (t.chart && t.target) continue; // tapped, same in every round
+    assert.ok(t.say, `${s.id} “${t.ask}”: needs a line to say`);
+    assert.ok(tokens(t.say).length <= 18, `${s.id}: “${t.say}” is too long to say in one go`);
+    assert.equal(scoreLine(t.say, t.say).result, "great", `${s.id}: “${t.say}” doesn't pass itself`);
+    assert.ok(maskLine(t.say, t.term ?? "").some((p) => p.hidden), `${s.id}: round 2 hides nothing in “${t.say}”`);
     if (t.choices) {
-      assert.equal(t.choices.filter((c) => c.ok).length, 1, `${s.id} “${t.ask}”: needs exactly one right choice`);
+      assert.equal(t.choices.filter((c) => c.ok).length, 1, `${s.id} “${t.ask}”: needs exactly one right choice (its “why” is shown after you say the line)`);
       for (const c of t.choices) assert.ok(c.why, `${s.id}: every choice explains itself`);
     }
-    if (t.fill) assert.equal(t.fill.text.split("___").length, 2, `${s.id}: fill needs one blank`);
     if (t.term) assert.ok(s.terms.some((x) => x.t === t.term), `${s.id}: term “${t.term}” isn't in the skit's terms`);
   }
 });
@@ -94,12 +94,38 @@ test("keyword fallback needs about half the ideas", () => {
   assert.ok(!keywordCheck("savings are bad", keys).ok);
 });
 
-test("which question each round asks", () => {
-  const t = { choices: [{ t: "a", ok: true, why: "x" }], fill: { text: "__", answers: ["a"] }, explain: { prompt: "p", keys: [["a"]], model: "a" } };
-  assert.deepEqual([1, 2, 3].map((r) => modeFor(t, r)), ["choice", "fill", "explain"]);
-  assert.deepEqual([1, 2, 3].map((r) => modeFor({ choices: t.choices }, r)), ["choice", "choice", "choice"]);
-  assert.deepEqual([1, 2, 3].map((r) => modeFor({ number: { answer: 1 }, explain: t.explain }, r)), ["number", "number", "explain"]);
-  assert.equal(modeFor({ chart: {}, target: { y: [1, 2] }, choices: t.choices }, 1), "chart");
+test("which kind of turn each round is, and when your own words count", () => {
+  const t = { say: "A limit order at $48.", ask: "What order?" };
+  assert.deepEqual([1, 2, 3].map((r) => turnMode(t, r)), ["repeat", "blanks", "free"]);
+  assert.equal(turnMode({ chart: {}, target: { y: [1, 2] } }, 3), "chart");
+  // Harder levels accept more variety: round 3 always; round 2 from level 3.
+  assert.equal(acceptsOwnWords("repeat", 5), false);
+  assert.equal(acceptsOwnWords("blanks", 2), false);
+  assert.equal(acceptsOwnWords("blanks", 3), true);
+  assert.equal(acceptsOwnWords("free", 1), true);
+  // The AI says your line first in round 1 of levels 1–2.
+  assert.equal(echoes("repeat", 1), true);
+  assert.equal(echoes("repeat", 3), false);
+  assert.equal(echoes("blanks", 1), false);
+});
+
+test("spoken lines: numbers in words or digits, small slips, and noise", () => {
+  assert.deepEqual(tokens("$1,100 at 8%"), ["1100", "at", "8", "percent"]);
+  assert.deepEqual(tokens("Seventy-two divided by eight"), ["72", "divided", "by", "8"]);
+  assert.deepEqual(tokens("five hundred million"), ["500", "million"]);
+  assert.equal(scoreLine("72 divided by 8 is 9 years.", "seventy two divided by eight is nine years").result, "great");
+  assert.ok(isPass(scoreLine("Savings and investing get paid first. I live on the rest.", "savings and investing get paid first I live on the rest")));
+  assert.ok(isPass(scoreLine("A Roth IRA. Taxes now, tax-free in retirement.", "a roth ira taxes now tax free in retirement")));
+  assert.ok(isPass(scoreLine("Cash account. No borrowing while I’m learning.", "cash account no borrowing while I'm learning")));
+  assert.equal(scoreLine("A limit order at $48.", "I like turtles").result, "try");
+  assert.equal(scoreLine("A limit order at $48.", "Thank you.").result, "nothing");
+});
+
+test("round 2 hides the key term first", () => {
+  const hidden = (line, term) => maskLine(line, term).filter((p) => p.hidden).map((p) => p.text);
+  assert.ok(hidden("A Roth IRA. Taxes now, tax-free in retirement.", "Roth IRA").includes("Roth"));
+  assert.ok(hidden("Savings and investing get paid first. I live on the rest.", "Pay yourself first").includes("first."));
+  assert.ok(!hidden("Limit order. That spread is way too wide.", "Market order").includes("is"), "little words stay");
 });
 
 test("review quiz: one right answer, two wrong ones from other terms", () => {

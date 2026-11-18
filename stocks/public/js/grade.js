@@ -70,17 +70,6 @@ export function keywordCheck(input, keys = []) {
   return { ok: keys.length > 0 && n >= Math.ceil(keys.length / 2), covered: n, total: keys.length };
 }
 
-/** What a turn asks for in a given round (1 pick, 2 fill, 3 explain), falling back sensibly. */
-export function modeFor(turn, round) {
-  if (turn.chart && turn.target) return "chart";
-  if (turn.number) return round === 3 && turn.explain ? "explain" : "number";
-  if (round === 3 && turn.explain) return "explain";
-  if (round >= 2 && turn.fill) return "fill";
-  if (turn.choices) return "choice";
-  if (turn.fill) return "fill";
-  return turn.explain ? "explain" : "choice";
-}
-
 const shuffled = (a, rand) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 /**
